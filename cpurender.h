@@ -82,7 +82,7 @@ render_line(struct fb_dumb* fb,
 void
 render_windowbase(struct fb_dumb* fb, struct Window* win)
 {
-	uint8_t* colour = malloc(4);
+	uint8_t* colour = malloc(4); /// C is reallocating colours again and again I guess.
 	colour[0] = 0xff; // B
 	colour[1] = 0xff; // G
 	colour[2] = 0xff; // R
