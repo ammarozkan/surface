@@ -97,7 +97,7 @@ surfacePutWindowTop(struct Window* window)
 
 	struct Window* prev = window->prev;
 	struct Window* next = window->next;
-	prev->next = next;
+	prev->next = next;              /// While I enjoy reading it, what if previous one doesnt exist? Well... It will continue to not existing I guess... Is it wrong? I dont have any idea.
 	next->prev = prev; // Connecting other ones together. And
 			   // extracting our window.
 	
