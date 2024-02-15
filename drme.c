@@ -16,6 +16,7 @@ unsigned int j = 0; // u know the drill
 #include "surface.h"
 #include "cpurender.h"
 
+#include "controlunit.h"
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
@@ -25,8 +26,13 @@ unsigned int j = 0; // u know the drill
 struct drme_specs
 {
 	char* gpupath;
+	char* keyboardpath;
 }; 
 
+struct ProgramStruct {
+	struct DrmSystem* drmSystem;
+	struct Surface* surface;
+};
 
 struct drme_specs*
 argWork(int argc, char* argv[])
@@ -37,9 +43,43 @@ argWork(int argc, char* argv[])
 		if(strcmp(argv[i],"--setgpu") == 0) {
 			i+=1; drmesptr->gpupath = argv[i];
 			printf("Setting GPU Path to '%s'.\n",argv[i]);
+		}else if(strcmp(argv[i],"--setkeyboard") == 0) {
+			i+=1; drmesptr->keyboardpath = argv[i];
+			printf("Setting Keyboard Path to '%s'.\n",argv[i]);
 		}
 	}
 	return drmesptr;
+}
+
+static void
+page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
+		unsigned tv_usec, void* data)
+{
+	(void)sequence;
+	(void)tv_sec;
+	(void)tv_usec;
+
+	// render here
+	
+	struct ProgramStruct* programStruct = data;
+	struct DrmSystem* drmSystem = programStruct->drmSystem;
+	struct Surface* surface = programStruct->surface;
+
+	struct fb_dumb* fb = drmSystem->fb_back;
+	
+	render_dumbbuffer(fb);
+	render_surface(fb,surface);
+
+	
+	if(drmModePageFlip(drm_fd, drmSystem->crtc_id, fb->id, 
+				DRM_MODE_PAGE_FLIP_EVENT, data) < 0)
+	{
+		perror("drmModePageFlip");
+	}
+
+	drmSystem->fb_back = drmSystem->fb_front;
+	drmSystem->fb_front = fb;
+	//DrmSystemEnableFlip(drm_fd,drmSys);
 }
 
 int
@@ -58,51 +98,31 @@ main(int argc, char* argv[])
 		return 1;
 	}
 
-	drmModeRes *resources = drmModeGetResources(drm_fd);
-	if (!resources) {
-		perror("Resources... They doesn't exist...\n\
-				Im sorry as hell for you, kid.\n");
-		return 1;
-	}
+	struct DrmSystem* drmSystem = initDRM(drm_fd); 
 
-	printf("They're %i connector and %i encoder in the source!\n",
-			resources->count_connectors,resources->count_encoders);
-	printf("Width is %u to %u and Height is %u to %u.\n",
-			resources->min_width,resources->max_width,
-			resources->min_height,resources->max_height);
-	drmModeConnector *conn = getCompatibleConnector(drm_fd, resources);
-
-	struct fb_dumb* fb = createDumbFrameBuffer(drm_fd, conn);
+	struct ProgramStruct* programStruct = malloc(sizeof(struct ProgramStruct));
 	
-	uint32_t taken_crtcs = 0;
-	uint32_t crtc_id = find_crtc(drm_fd, resources, conn, &taken_crtcs);
-	render_dumbbuffer(fb);
-	drmModeSetCrtc(drm_fd, crtc_id, fb->id, 0, 0,
-			&conn->connector_id, 1, &conn->modes[0]);
-
-
-	uint32_t thacounter = 1;
+	programStruct->drmSystem = drmSystem;
 	struct Surface* surface = createSurface();
-	struct QuickCursor cursor = {.x = 85, .y = 85};
-	surfaceAddWindow(surface, 60, 60, 500, 300);
-	uint32_t pos = 60;
+	programStruct->surface = surface;
+	DrmSystemEnableFlip(drm_fd, drmSystem, programStruct);
+
+
+	struct ControlUnit controlUnit = 
+		cuCreateControlUnit(drmesptr->keyboardpath,"");
+	controlUnit.data = surface;
+	controlUnit.SuperSpace = surfaceAddWindow_quick;
+	controlUnit.SuperK = surfaceMoveMainWindowLeft_quick;
 	while(1) {
-		thacounter+=1; thacounter = (thacounter%255);
-		render_dumbbuffer(fb);
-		cursor.x = thacounter;
-		cursor.y = 255 - thacounter;
-		render_surface(fb,surface);
-		if(thacounter%200 == 0) {
-			surfaceAddWindow(surface,pos,pos,pos+500,pos+300);
-			pos+=30;
-		}
-		render_quickcursor(fb,&cursor);
-		drmModeSetCrtc(drm_fd, crtc_id, fb->id, 0, 0,
-				&conn->connector_id, 1, &conn->modes[0]);
+		// Control
+		int cresult = cuEventRead(&controlUnit);	
+		
+		drmVSyncFlip(drm_fd,page_flip_handler);
+		//drmModeSetCrtc(drm_fd, crtc_id, fb->id, 0, 0, &conn->connector_id, 1, &conn->modes[0]);
 	}
 	
 closeprogram:
-	drmModeFreeResources(resources);
+	drmModeFreeResources(drmSystem->resources);
 	close(drm_fd);
 
 	printf("Succesfully exiting from program.\n");

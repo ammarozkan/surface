@@ -40,7 +40,10 @@ struct Window {
 };
 
 struct Surface {
-	struct Window* focus;	// The Last Window from wins or NULL as "Desktop"
+	struct QuickCursor cursor;
+	struct Window* focus;	
+	// The Last Window from wins or NULL as "Desktop"
+	
 	struct Window* wins;
 };
 
@@ -57,6 +60,7 @@ createSurface()
 {
 	struct Surface* result = malloc(sizeof(struct Surface));
 	result->wins = NULL;
+	result->cursor.x = result->cursor.y = 60;
 	return result;
 }
 
@@ -88,6 +92,21 @@ surfaceAddWindow(struct Surface* surface,
 	*lastnull = createWindow(sx,sy,ex,ey);
 }
 
+void surfaceAddWindow_quick(struct Surface* surface)
+{
+	static uint32_t lastPos = 0;
+	lastPos += 30;
+	surfaceAddWindow(surface,
+			60+lastPos, 60+lastPos, 200+lastPos, 200+lastPos);
+	FIND_LAST_ELEMENT(surface->focus, surface->wins);
+}
+
+void surfaceMoveMainWindowLeft_quick(struct Surface* surface)
+{
+	surface->focus->sx += 10;
+	surface->focus->ex += 10;
+}
+
 void
 surfacePutWindowTop(struct Window* window)
 {
@@ -97,7 +116,7 @@ surfacePutWindowTop(struct Window* window)
 
 	struct Window* prev = window->prev;
 	struct Window* next = window->next;
-	prev->next = next;              /// While I enjoy reading it, what if previous one doesnt exist? Well... It will continue to not existing I guess... Is it wrong? I dont have any idea.
+	prev->next = next;
 	next->prev = prev; // Connecting other ones together. And
 			   // extracting our window.
 	
@@ -107,5 +126,6 @@ surfacePutWindowTop(struct Window* window)
 			     // window.
 	// pure enjoyment.
 }
+
 
 #endif

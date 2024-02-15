@@ -1,5 +1,7 @@
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+#include <errno.h>
+#include <poll.h>
 
 struct fb_dumb {
 	uint32_t id,		// DRM object ID
@@ -12,6 +14,14 @@ struct fb_dumb {
 	uint8_t *data;		// memory mapped data we can write to
 };
 
+struct DrmSystem {
+	uint32_t crtc_id;
+	struct fb_dumb* fb_back;
+	struct fb_dumb* fb_front;
+	drmModeRes* resources;
+	drmModeConnector* connector;
+
+};
 
 static const char*
 conn_str(uint32_t conn_type)
@@ -131,3 +141,70 @@ createDumbFrameBuffer(int drm_fd,drmModeConnector* conn)
 	return fb;
 }
 
+struct DrmSystem*
+initDRM(int drm_fd)
+{
+	struct DrmSystem* drmSystem = malloc(sizeof(struct DrmSystem));
+	drmModeRes *resources = drmModeGetResources(drm_fd);
+	if (!resources) {
+		perror("Resources... They doesn't exist...\n\
+				Im sorry as hell for you, kid.\n");
+		return 1;
+	}
+
+	printf("They're %i connector and %i encoder in the source!\n",
+			resources->count_connectors,resources->count_encoders);
+	printf("Width is %u to %u and Height is %u to %u.\n",
+			resources->min_width,resources->max_width,
+			resources->min_height,resources->max_height);
+	drmModeConnector *conn = getCompatibleConnector(drm_fd, resources);
+
+	struct fb_dumb* fb_back = createDumbFrameBuffer(drm_fd, conn);
+	struct fb_dumb* fb_front = createDumbFrameBuffer(drm_fd, conn);
+
+	uint32_t taken_crtcs = 0;
+	uint32_t crtc_id = find_crtc(drm_fd, resources, conn, &taken_crtcs);
+	drmModeSetCrtc(drm_fd, crtc_id, fb_front->id, 0, 0,
+			&conn->connector_id, 1, &conn->modes[0]);
+	drmSystem->crtc_id = crtc_id;
+	drmSystem->fb_front = fb_front;
+	drmSystem->fb_back = fb_back;
+	drmSystem->resources = resources;
+	drmSystem->connector = conn;
+	return drmSystem;
+}
+
+int
+DrmSystemEnableFlip(int drm_fd,struct DrmSystem* drmSystem,void* data)
+{
+	int ret = drmModePageFlip(drm_fd, drmSystem->crtc_id, drmSystem->fb_front->id,
+			DRM_MODE_PAGE_FLIP_EVENT, data);
+	if(ret < 0) perror("drmModePageFlip in EnableFlip thing.");
+	return ret;
+}
+
+int
+drmVSyncFlip(int drm_fd, 
+		void (*page_flip_handler)(int, unsigned, unsigned, unsigned, void*))
+{
+	struct pollfd pollfd = {
+		.fd = drm_fd,
+		.events = POLLIN,
+	};
+
+	int ret = poll(&pollfd, 1, 0);
+	if(ret < 0 && errno != "EAGAIN") {
+		perror("poll");
+		return -1;
+	}
+	if (pollfd.revents & POLLIN) {
+		drmEventContext context = {
+			.version = DRM_EVENT_CONTEXT_VERSION,
+			.page_flip_handler = page_flip_handler,
+		};
+		if(drmHandleEvent(drm_fd,&context) < 0) {
+			perror("drmHandleEvent");
+			return -1;
+		}
+	}
+}
