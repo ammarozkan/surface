@@ -12,11 +12,14 @@ unsigned int i = 0; // global counter. I dont want to
 		    // again.
 unsigned int j = 0; // u know the drill
 
+#include "ezySurface/ezySurfaceServer.h"
+
 #include "drm.h"
 #include "surface.h"
 #include "cpurender.h"
 
 #include "controlunit.h"
+
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
@@ -27,6 +30,9 @@ struct drme_specs
 {
 	char* gpupath;
 	char* keyboardpath;
+	char* touchscreenpath; 	// my virtual machine works with my mouse like 
+			    	// this but its not accurate in a
+			    	// real machine i guess.
 }; 
 
 struct ProgramStruct {
@@ -46,6 +52,9 @@ argWork(int argc, char* argv[])
 		}else if(strcmp(argv[i],"--setkeyboard") == 0) {
 			i+=1; drmesptr->keyboardpath = argv[i];
 			printf("Setting Keyboard Path to '%s'.\n",argv[i]);
+		}else if(strcmp(argv[i],"--settouchscreen") == 0) {
+			i+=1; drmesptr->touchscreenpath = argv[i];
+			printf("Setting Touchscreen Path to '%s'.\n",argv[i]);
 		}
 	}
 	return drmesptr;
@@ -61,13 +70,20 @@ page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
 
 	// render here
 	
+	static uint32_t clearCounter = 9;
+
 	struct ProgramStruct* programStruct = data;
 	struct DrmSystem* drmSystem = programStruct->drmSystem;
 	struct Surface* surface = programStruct->surface;
 
 	struct fb_dumb* fb = drmSystem->fb_back;
 	
-	render_dumbbuffer(fb);
+	
+	clearCounter -= 1;
+	if(clearCounter == 0) {
+		render_dumbbuffer(fb);
+		clearCounter = 9;
+	}
 	render_surface(fb,surface);
 
 	
@@ -80,6 +96,41 @@ page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
 	drmSystem->fb_back = drmSystem->fb_front;
 	drmSystem->fb_front = fb;
 	//DrmSystemEnableFlip(drm_fd,drmSys);
+}
+
+uint32_t getChangedRange(uint32_t value, uint32_t old, uint32_t new)
+{
+	return ((float)new)*((float)value)
+			/((float)old);
+}
+
+void TouchscreenPositionX(unsigned int value,struct ProgramStruct* data)
+{
+	uint32_t width = data->drmSystem->fb_back->width;
+	uint32_t newx = getChangedRange(value, 32000, width);
+	surfaceMoveCursorX(data->surface, newx);
+}
+
+void TouchscreenPositionY(unsigned int value, struct ProgramStruct* data)
+{
+	uint32_t height = data->drmSystem->fb_back->height;
+	uint32_t newy = getChangedRange(value, 32000, height);
+	surfaceMoveCursorY(data->surface, newy);
+}
+
+void TouchscreenClick(struct ProgramStruct* data,unsigned short code,unsigned int value)
+{
+	clickSurface(data->surface,code,value);
+}
+
+void SuperSpace(struct ProgramStruct* data)
+{
+	surfaceAddWindow_quick(data->surface);
+}
+
+void SuperK(struct ProgramStruct* data)
+{
+	surfaceMoveMainWindowLeft_quick(data->surface);
 }
 
 int
@@ -100,25 +151,36 @@ main(int argc, char* argv[])
 
 	struct DrmSystem* drmSystem = initDRM(drm_fd); 
 
-	struct ProgramStruct* programStruct = malloc(sizeof(struct ProgramStruct));
+	struct ProgramStruct* programStruct = 
+		malloc(sizeof(struct ProgramStruct));
 	
 	programStruct->drmSystem = drmSystem;
+	render_dumbbuffer(drmSystem->fb_back);
+	render_dumbbuffer(drmSystem->fb_front);
 	struct Surface* surface = createSurface();
 	programStruct->surface = surface;
 	DrmSystemEnableFlip(drm_fd, drmSystem, programStruct);
 
 
 	struct ControlUnit controlUnit = 
-		cuCreateControlUnit(drmesptr->keyboardpath,"");
-	controlUnit.data = surface;
-	controlUnit.SuperSpace = surfaceAddWindow_quick;
-	controlUnit.SuperK = surfaceMoveMainWindowLeft_quick;
+		cuCreateControlUnit(drmesptr->keyboardpath,drmesptr->touchscreenpath);
+	controlUnit.data = programStruct;
+	controlUnit.SuperSpace = SuperSpace;
+	controlUnit.SuperK = SuperK;
+	controlUnit.TouchscreenPositionX = TouchscreenPositionX;
+	controlUnit.TouchscreenPositionY = TouchscreenPositionY;
+	controlUnit.TouchscreenClick = TouchscreenClick;
+
+	int unixserver = ezySurfaceCreateUnixServer("/surfacedesktop/regulardesktop-0");
+	perror("E");
 	while(1) {
 		// Control
-		int cresult = cuEventRead(&controlUnit);	
+		int cresult = cuEventRead(&controlUnit);
 		
 		drmVSyncFlip(drm_fd,page_flip_handler);
-		//drmModeSetCrtc(drm_fd, crtc_id, fb->id, 0, 0, &conn->connector_id, 1, &conn->modes[0]);
+
+		surfaceLookUpClients(surface,unixserver);
+		surfaceLookUpRequests(surface);
 	}
 	
 closeprogram:

@@ -1,6 +1,20 @@
 #ifndef SURFACE_H
 #define SURFACE_H
 
+#include <string.h>
+
+// Window Style Constants
+#define WINDOW_ROOF_THICKNESS 16
+#define WINDOW_ROOF_BUTTON_THICKNESS 8
+#define WINDOW_GENERIC_ROOF_BUTTON_WIDTH 20
+#define WINDOW_SPACE_FROM_START 5
+#define WINDOW_SPACE_BETWEEN_ROOF_BUTTONS 5
+#define WINDOW_PANIC_BUTTON_WIDTH 8
+
+
+// Other Generated Constants
+#define WINDOW_UNTIL_BUTTON_THICKNESS (WINDOW_ROOF_THICKNESS-WINDOW_ROOF_BUTTON_THICKNESS)/2
+
 #define SURF_ITERATE(typed,array,as) \
 	for(typed* as = array;as!=NULL;as=as->next)
 
@@ -35,8 +49,27 @@ struct Window {
 	SurfaceIdType id;
 	uint32_t sx, sy, ex, ey;
 	uint32_t elementCount;
+
+	uint8_t bckr_colour[4];
+
 	struct WindowElement* elements;
 	struct Window* next;
+
+	struct ezySurfaceClient* client;
+};
+
+struct DesktopContextMenu {
+#define SURFACE_CONTEXT_ACTIVE (1 << 1)
+	uint8_t info;
+	uint32_t posx, posy;
+};
+
+struct Grab {
+#define SURFACE_GRAB_UNDEF 0
+#define SURFACE_GRAB_WINDOW 1
+	uint32_t type;
+	void* ptr;
+	uint32_t x, y;
 };
 
 struct Surface {
@@ -45,6 +78,11 @@ struct Surface {
 	// The Last Window from wins or NULL as "Desktop"
 	
 	struct Window* wins;
+	struct Window* lastWindow;
+
+	struct DesktopContextMenu dcm;
+
+	struct Grab grab;
 };
 
 SurfaceIdType
@@ -68,6 +106,7 @@ struct Window*
 createWindow(uint32_t sx, uint32_t sy, 
 	     uint32_t ex, uint32_t ey)
 {
+	printf("WINDOWCREATION!\n");
 	struct Window* result = malloc(sizeof(struct Window));
 	result->prev = NULL;
 	result->id = surfaceGetId();
@@ -78,7 +117,27 @@ createWindow(uint32_t sx, uint32_t sy,
 	result->elementCount = 0;
 	result->elements = NULL;
 	result->next = NULL;
+	result->client = NULL;
+	uint8_t white[4] = {0xff,0xff,0xff,0xff};
+	memcpy(result->bckr_colour, white, 4);
 	return result;
+}
+
+
+void
+surfaceAddSpecificWindow(struct Surface* surface,
+		struct Window* window)
+{
+	if(surface->lastWindow == NULL) {
+		printf("First!\n");
+		surface->wins = window;
+		surface->lastWindow = window;
+		surface->lastWindow->next = surface->lastWindow->prev = NULL;
+	} else {
+		surface->lastWindow->next = window;
+		window->prev = surface->lastWindow;
+		surface->lastWindow = window;
+	}
 }
 
 void
@@ -86,19 +145,22 @@ surfaceAddWindow(struct Surface* surface,
 			uint32_t sx, uint32_t sy, 
 	     		uint32_t ex, uint32_t ey)
 {
-	struct Window** lastnull;
-	for(lastnull = &surface->wins ; *lastnull!=NULL ; lastnull=&(*lastnull)->next);
+	surfaceAddSpecificWindow(surface, createWindow(sx,sy,ex,ey));
+	//struct Window** lastnull;
+	//for(lastnull = &surface->wins ; *lastnull!=NULL ; lastnull=&(*lastnull)->next);
 					/// OHOHOHHHHMMMMMMM I loved that.
-	*lastnull = createWindow(sx,sy,ex,ey);
+	//*lastnull = createWindow(sx,sy,ex,ey); // besides beutifility (booooop) these loops are killing the program.
+	// but you know what? Im not gonna delete that loop from here, im just gonna comment it. That loop is sick.
 }
+
 
 void surfaceAddWindow_quick(struct Surface* surface)
 {
 	static uint32_t lastPos = 0;
-	lastPos += 30;
+	lastPos += 30; if(lastPos > 1000) lastPos = 30;
 	surfaceAddWindow(surface,
-			60+lastPos, 60+lastPos, 200+lastPos, 200+lastPos);
-	FIND_LAST_ELEMENT(surface->focus, surface->wins);
+			lastPos, lastPos, 400+lastPos, 300+lastPos);
+	surface->focus = surface->lastWindow;
 }
 
 void surfaceMoveMainWindowLeft_quick(struct Surface* surface)
@@ -108,24 +170,226 @@ void surfaceMoveMainWindowLeft_quick(struct Surface* surface)
 }
 
 void
-surfacePutWindowTop(struct Window* window)
+surfacePutWindowTop(struct Surface* surface, struct Window* window)
 {
-	struct Window* last;
-	FIND_LAST_ELEMENT(last,window);
-	if(last == window) return;
+	if(surface->lastWindow == window) return;
 
 	struct Window* prev = window->prev;
 	struct Window* next = window->next;
-	prev->next = next;
+	
+	if (prev != NULL) prev->next = next;
+	else surface->wins = next;
 	next->prev = prev; // Connecting other ones together. And
 			   // extracting our window.
-	
-	last->next = window;
-	window->prev = last;
+	surface->lastWindow->next = window;
+	window->prev = surface->lastWindow;
 	window->next = NULL; // connecting our window with the last
 			     // window.
+	surface->lastWindow = window; // Boom, now its the last one.
 	// pure enjoyment.
 }
 
+
+/*
+ *
+ *  Controls
+ *
+ */
+
+void
+surfaceCloseWindow(struct Surface* surface, struct Window* window)
+{
+	// destroy elements
+	if(window->prev != NULL) window->prev->next = window->next;
+	else surface->wins = window->next;
+
+	if(window->next != NULL) {
+		window->next->prev = window->prev;
+	} else {
+		surface->lastWindow = window->prev;
+		surface->focus = surface->lastWindow;
+	}
+	free(window);
+}
+
+int
+constantWindowCloseButtonControl(uint32_t x, uint32_t y, struct Window* window)
+{
+	int ycontrol = window->sy - WINDOW_UNTIL_BUTTON_THICKNESS - WINDOW_ROOF_BUTTON_THICKNESS < y && y < window->sy - WINDOW_UNTIL_BUTTON_THICKNESS;
+	int xcontrol = window->sx + WINDOW_SPACE_FROM_START < x && x < window->sx + WINDOW_GENERIC_ROOF_BUTTON_WIDTH;
+	return xcontrol && ycontrol;
+}
+
+void
+clickWindowInside(struct Surface* surface, 
+		struct Window* window, unsigned short code)
+{
+
+}
+
+void
+clickWindow(struct Surface* surface, struct Window* window, 
+		unsigned short code)
+{
+
+	surface->dcm.info &= ~SURFACE_CONTEXT_ACTIVE;
+	surfacePutWindowTop(surface,window);
+	surface->focus = window;
+	
+	if(constantWindowCloseButtonControl(surface->cursor.x, 
+					    surface->cursor.y, 
+					    window)) {
+		surfaceCloseWindow(surface,window);
+	} else if(window->sx < surface->cursor.x && 
+			surface->cursor.x < window->ex &&
+			window->sy < surface->cursor.y &&
+			surface->cursor.y < window->ey){
+		// Inside
+		clickWindowInside(surface, window, code);
+	}
+	else {
+		// Border
+		surface->grab.type = SURFACE_GRAB_WINDOW;
+		surface->grab.ptr = window;
+		surface->grab.x = surface->cursor.x;
+		surface->grab.y = surface->cursor.y;
+	}
+}
+
+void
+grabEnd(struct Surface* surface, unsigned short code)
+{
+	surface->grab.type = SURFACE_GRAB_UNDEF;
+	surface->grab.ptr = NULL;
+}
+
+void
+clickSurface(struct Surface* surface, unsigned short code,
+		unsigned int value)
+{
+	printf("Click event. %u\n",value);
+	if(value == 0) {
+		grabEnd(surface,code);
+		return;
+	}
+
+	printf("Surface Click!\n");
+
+	uint32_t x = surface->cursor.x, y = surface->cursor.y;
+	for(struct Window* elmWindow = surface->lastWindow;elmWindow!=NULL;elmWindow = elmWindow->prev)
+	{
+		if(elmWindow->sx < x && x < elmWindow->ex &&
+				elmWindow->sy - WINDOW_ROOF_THICKNESS < y && y < elmWindow->ey)
+		{
+			clickWindow(surface, elmWindow, code);
+			return;
+		}
+	}
+
+	
+	if(code == 273) {
+		surface->dcm.posx = x; surface->dcm.posy = y;
+		surface->dcm.info |= SURFACE_CONTEXT_ACTIVE;
+	} else surface->dcm.info &= ~SURFACE_CONTEXT_ACTIVE;
+	printf("Desktop Click Everybody!\n");
+	return;
+}
+
+// These basic functions will be useful in drag & drop operations.
+// inlines could be removed in final version. for now, inline is good.
+static inline void 
+surfaceMoveCursorX(struct Surface* surface, uint32_t x)
+{
+	surface->cursor.x = x;
+	if(surface->grab.type == SURFACE_GRAB_WINDOW)
+	{
+		int move = surface->cursor.x - surface->grab.x;
+		struct Window* grabbed = surface->grab.ptr;
+		grabbed->sx += move;
+		grabbed->ex += move;
+	}
+	surface->grab.x = x;
+}
+
+static inline void 
+surfaceMoveCursorY(struct Surface* surface, uint32_t y)
+{
+	surface->cursor.y = y;
+	if(surface->grab.type == SURFACE_GRAB_WINDOW)
+	{
+		int move = surface->cursor.y - surface->grab.y;
+		struct Window* grabbed = surface->grab.ptr;
+		grabbed->sy += move;
+		grabbed->ey += move;
+	}
+	surface->grab.y = y;
+}
+
+static inline void
+surfaceMoveCursor(struct Surface* surface, uint32_t x, uint32_t y)
+{
+	surface->cursor.x = x;
+	surface->cursor.y = y;
+}
+
+
+/*
+ *
+ *  Server Stuff
+ *
+ */
+
+void
+surfaceWorkOnRequest(struct Surface* surface, struct Window* win)
+{
+	struct ProgramRequestBase* base 
+		= ezySurfaceReceiveRequestBase(win->client);
+	if (base==NULL) return;
+	switch (base->requestType)
+	{
+	case PROGRAM_REQUEST_KILL:
+		printf("Wellll....\n");
+		struct ProgramRequest_kill* kill_req
+			= ezySurfaceReceiveKillRequest(win->client);
+		if(kill_req!=NULL) {
+			printf("BOOOM TO YOUR HEAD MTF\n");
+			surfaceCloseWindow(surface,win);
+			free(kill_req);
+		}
+		break;
+	default:
+		printf("Uhm.\n");
+	}
+	free(base);
+}
+
+void
+surfaceLookUpRequests(struct Surface* surface) 
+{
+
+	SURF_ITERATE(struct Window, surface->wins, win)
+	{
+		surfaceWorkOnRequest(surface, win);
+	}
+}
+
+void
+surfaceLookUpClients(struct Surface* surface,int server_fd)
+{
+	struct ezySurfaceClient* surfaceClient = 
+		ezySurfaceLookUpClients(server_fd);
+	if(surfaceClient == NULL) return;
+	
+	struct ProgramFirstRequest* req = 
+		ezySurfaceFirstRequestReceive(surfaceClient);
+	if(req==NULL) return;
+	
+	struct Window* window = createWindow(30, 30,
+			30 + req->windowsize_x,
+			30 + req->windowsize_y);
+	window->client = surfaceClient;
+	memcpy(window->bckr_colour, req->bckr_colour, 4);
+	surfaceAddSpecificWindow(surface, window);
+}
 
 #endif

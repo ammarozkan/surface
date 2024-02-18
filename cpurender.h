@@ -37,9 +37,9 @@ reverse_box(struct fb_dumb* fb,
 		uint32_t sx, uint32_t sy, 
 		uint32_t ex, uint32_t ey)
 {
-	for(uint32_t y = sy; y < ey;y++) {
+	for(uint32_t y = sy; y < ey && y < fb->height;y++) {
 		uint8_t *row = fb->data + fb->stride * y;
-		for(uint32_t x = sx; x < ex;x++) {
+		for(uint32_t x = sx; x < ex && x < fb->width;x++) {
 			row[x * 4 + 0] = 255 - row[x * 4 + 0];
 			row[x * 4 + 1] = 255 - row[x * 4 + 1];
 			row[x * 4 + 2] = 255 - row[x * 4 + 2];
@@ -54,9 +54,9 @@ render_box(struct fb_dumb* fb,
 		uint32_t ex, uint32_t ey,
 		uint8_t* colour)
 {
-	for(uint32_t y = sy; y < ey;y++) {
+	for(uint32_t y = sy; y < ey && y < fb->height;y++) {
 		uint8_t *row = fb->data + fb->stride * y;
-		for(uint32_t x = sx; x < ex;x++) {
+		for(uint32_t x = sx; x < ex && x < fb->width;x++) {
 			row[x * 4 + 0] = colour[0];
 			row[x * 4 + 1] = colour[1];
 			row[x * 4 + 2] = colour[2];
@@ -70,8 +70,9 @@ render_line(struct fb_dumb* fb,
 		uint32_t sx, uint32_t ex, uint32_t y,
 		uint8_t* colour)
 {
+	if (y > fb->height) return;
 	uint8_t *row = fb->data + fb->stride * y;
-	for(uint32_t x = sx;x < ex; x++) {
+	for(uint32_t x = sx;x < ex && x < fb->width; x++) {
 		row[x * 4 + 0] = colour[0];
 		row[x * 4 + 1] = colour[1];
 		row[x * 4 + 2] = colour[2];
@@ -82,56 +83,71 @@ render_line(struct fb_dumb* fb,
 void
 render_windowbase(struct fb_dumb* fb, struct Window* win)
 {
-	uint8_t* colour = malloc(4);
-	colour[0] = 0xff; // B
-	colour[1] = 0xff; // G
-	colour[2] = 0xff; // R
-	colour[3] = 0xff; // X
-	uint8_t* blackcolour = malloc(4);
-	blackcolour[0] = 0x22;
-	blackcolour[1] = 0x22;
-	blackcolour[2] = 0x22;
-	blackcolour[3] = 0x00;
-	uint8_t* redcolour = malloc(4);
-	redcolour[0] = 0x00;
-	redcolour[1] = 0x11;
-	redcolour[2] = 0xbb;
-	redcolour[3] = 0x00;
-	uint8_t* yellowcolour = malloc(4);
-	yellowcolour[0] = 0x00;
-	yellowcolour[1] = 0xbb;
-	yellowcolour[2] = 0xbb;
-	yellowcolour[3] = 0x00;
-	uint8_t* greencolour = malloc(4);
-	greencolour[0] = 0x00;
-	greencolour[1] = 0xbb;
-	greencolour[2] = 0x11;
-	greencolour[3] = 0x00;
+	uint8_t colour[4] = {0xff,0xff,0xff,0xff};
+	uint8_t bordercolour[4] = {0x22,0x22,0x22,0x00};
+	uint8_t exitcolour[4] = {0x00,0x11,0xbb,0x00};
+	uint8_t paniccolour[4] = {0x00,0xbb,0xbb,0x00};
+	uint8_t fullscreencolour[4] = {0x00,0xbb,0x11,0x00};
 
 	const int COL_TH = 2; // COLUMN_THICKNESS
-	const int BUTTON_TH = 5;
-	for(i = 0;i<COL_TH;i+=1) {
-		render_line(fb, win->sx, win->ex, win->sy-i,blackcolour);
-		render_line(fb, win->sx, win->ex, win->sy-i-COL_TH-BUTTON_TH, blackcolour);
+	const int BUTTON_TH = 10;
+	for(i = 0;i<WINDOW_UNTIL_BUTTON_THICKNESS;i+=1) {
+		render_line(fb, win->sx, win->ex, win->sy - i, bordercolour);
 	}
 
-	for(j = 0;j<BUTTON_TH;j+=1) {	
-		render_line(fb, win->sx, win->sx + 5, win->sy-i-j, blackcolour);
-		render_line(fb, win->sx + COL_TH, win->sx + 25, win->sy-i-j, redcolour); // exit
-		render_line(fb, win->sx + 25, win->sx + 30, win->sy-i-j, blackcolour); // black
-		render_line(fb, win->sx + 30, win->sx + 50, win->sy-i-j, greencolour); // fullscreen
-		render_line(fb, win->sx + 50, win->ex - 10, win->sy-i-j, blackcolour); // black
-		render_line(fb, win->ex - 10, win->ex - 10 + BUTTON_TH, win->sy-i-j, yellowcolour); // panic button
-		render_line(fb, win->ex - 10 + BUTTON_TH, win->ex, win->sy-i-j, blackcolour); // black
+	for(j = 0;j<WINDOW_ROOF_BUTTON_THICKNESS;j+=1) {
+		// Start Space
+		uint32_t linestart = win->sx, 
+			 lineend = win->sx + WINDOW_SPACE_FROM_START;
+		render_line(fb, linestart, lineend, 
+				win->sy - i - j,bordercolour);
+
+		// Close Button		
+		linestart = lineend; 
+		lineend += WINDOW_GENERIC_ROOF_BUTTON_WIDTH;
+
+		render_line(fb, linestart, lineend, 
+				win->sy - i - j,exitcolour);
+
+		// Space
+		linestart = lineend;
+		lineend += WINDOW_SPACE_BETWEEN_ROOF_BUTTONS;
+		render_line(fb, linestart, lineend, 
+				win->sy - i - j,bordercolour);
+
+		// Fullscreen Button
+		linestart = lineend;
+		lineend += WINDOW_GENERIC_ROOF_BUTTON_WIDTH;
+		render_line(fb, linestart, lineend, 
+				win->sy - i - j,fullscreencolour);
+		
+		// Space Until Panic Button
+		linestart = lineend;
+		lineend = win->ex - WINDOW_SPACE_FROM_START 
+				  - WINDOW_PANIC_BUTTON_WIDTH;
+		render_line(fb, linestart, lineend, 
+				win->sy - i - j,bordercolour);
+
+		// Panic Button
+		lineend = win->ex - WINDOW_SPACE_FROM_START;
+		linestart = lineend - WINDOW_PANIC_BUTTON_WIDTH;
+		render_line(fb, linestart, lineend, 
+				win->sy - i - j,paniccolour);
+
+		// Last Empty Space	
+		render_line(fb, lineend, win->ex, 
+				win->sy - i - j,bordercolour);
+	}
+
+	for(i = 0;i<WINDOW_UNTIL_BUTTON_THICKNESS;i+=1) {
+		render_line(fb, win->sx, win->ex, win->sy - i - WINDOW_UNTIL_BUTTON_THICKNESS - WINDOW_ROOF_BUTTON_THICKNESS, bordercolour);
 	}
 
 
-	render_box(fb, win->sx - 5, win->sy - COL_TH*2 - BUTTON_TH + 1, win->sx, win->ey,blackcolour);
+	//render_box(fb, win->sx - 5, win->sy - COL_TH*2 - BUTTON_TH + 1, win->sx, win->ey,blackcolour);
 	//render_box(fb, win->ex, win->sy - COL_TH*2 - BUTTON_TH + 1, win->ex + 4, win->ey,blackcolour);
-	render_box(fb, win->sx, win->sy, win->ex, win->ey,colour);
+	render_box(fb, win->sx, win->sy, win->ex, win->ey,win->bckr_colour);
 
-	free(colour);
-	free(blackcolour);
 }
 
 void render_quickcursor(struct fb_dumb* fb, struct QuickCursor* qc)
@@ -153,5 +169,10 @@ render_surface(struct fb_dumb* fb,struct Surface* surf)
 	{
 		render_window(fb,win);
 	}
+	uint8_t contextcolour[4] = {0x22, 0x22, 0x22, 0x22};
+	uint8_t whitecolour[4] = {0xff,0xff,0xff,0xff};
+	if(surf->dcm.info & SURFACE_CONTEXT_ACTIVE) 
+		render_box(fb,surf->dcm.posx,surf->dcm.posy,
+				surf->dcm.posx + 20, surf->dcm.posy + 50,contextcolour);
 	render_quickcursor(fb, &surf->cursor);
 }
