@@ -37,6 +37,7 @@ struct drme_specs
 
 struct ProgramStruct {
 	struct DrmSystem* drmSystem;
+	void* fb;
 	struct Surface* surface;
 };
 
@@ -61,7 +62,7 @@ argWork(int argc, char* argv[])
 }
 
 static void
-page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
+cpu_page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
 		unsigned tv_usec, void* data)
 {
 	(void)sequence;
@@ -76,7 +77,8 @@ page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
 	struct DrmSystem* drmSystem = programStruct->drmSystem;
 	struct Surface* surface = programStruct->surface;
 
-	struct fb_dumb* fb = drmSystem->fb_back;
+	struct CPUFrameBuffer* fb_cpu = programStruct->fb;
+	struct fb_dumb* fb = fb_cpu->fb_back;
 	
 	
 	clearCounter -= 1;
@@ -93,8 +95,8 @@ page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
 		perror("drmModePageFlip");
 	}
 
-	drmSystem->fb_back = drmSystem->fb_front;
-	drmSystem->fb_front = fb;
+	fb_cpu->fb_back = fb_cpu->fb_front;
+	fb_cpu->fb_front = fb;
 	//DrmSystemEnableFlip(drm_fd,drmSys);
 }
 
@@ -106,14 +108,14 @@ uint32_t getChangedRange(uint32_t value, uint32_t old, uint32_t new)
 
 void TouchscreenPositionX(unsigned int value,struct ProgramStruct* data)
 {
-	uint32_t width = data->drmSystem->fb_back->width;
+	uint32_t width = ((struct CPUFrameBuffer*)data->fb)->fb_front->width;
 	uint32_t newx = getChangedRange(value, 32000, width);
 	surfaceMoveCursorX(data->surface, newx);
 }
 
 void TouchscreenPositionY(unsigned int value, struct ProgramStruct* data)
 {
-	uint32_t height = data->drmSystem->fb_back->height;
+	uint32_t height = ((struct CPUFrameBuffer*)data->fb)->fb_front->height;
 	uint32_t newy = getChangedRange(value, 32000, height);
 	surfaceMoveCursorY(data->surface, newy);
 }
@@ -149,19 +151,27 @@ main(int argc, char* argv[])
 		return 1;
 	}
 
-	struct DrmSystem* drmSystem = initDRM(drm_fd); 
-
+	struct DrmSystem* drmSystem = initDRM(drm_fd);
+       	printf("DRM Init.\n");	
+	printf("CPU Render Init.\n");
 	struct ProgramStruct* programStruct = 
 		malloc(sizeof(struct ProgramStruct));
+	printf("Program Sruct allocated.\n");
 	
+	programStruct->fb = initCPUDumbs(drm_fd, drmSystem);
+	
+	printf("Start Render.\n");
 	programStruct->drmSystem = drmSystem;
-	render_dumbbuffer(drmSystem->fb_back);
-	render_dumbbuffer(drmSystem->fb_front);
+	render_dumbbuffer(((struct CPUFrameBuffer*)programStruct->fb)->fb_back);
+	render_dumbbuffer(((struct CPUFrameBuffer*)programStruct->fb)->fb_front);
+	
+	printf("Surface Main Program Creation.\n");
 	struct Surface* surface = createSurface();
 	programStruct->surface = surface;
-	DrmSystemEnableFlip(drm_fd, drmSystem, programStruct);
+	DrmSystemEnableFlip(drm_fd, drmSystem, ((struct CPUFrameBuffer*)programStruct->fb)->fb_front->id, programStruct);
 
 
+	printf("Control Unit\n");
 	struct ControlUnit controlUnit = 
 		cuCreateControlUnit(drmesptr->keyboardpath,drmesptr->touchscreenpath);
 	controlUnit.data = programStruct;
@@ -171,13 +181,14 @@ main(int argc, char* argv[])
 	controlUnit.TouchscreenPositionY = TouchscreenPositionY;
 	controlUnit.TouchscreenClick = TouchscreenClick;
 
+	printf("UNIX Server.\n");
 	int unixserver = ezySurfaceCreateUnixServer("/surfacedesktop/regulardesktop-0");
 	perror("E");
 	while(1) {
 		// Control
 		int cresult = cuEventRead(&controlUnit);
 		
-		drmVSyncFlip(drm_fd,page_flip_handler);
+		drmVSyncFlip(drm_fd,cpu_page_flip_handler);
 
 		surfaceLookUpClients(surface,unixserver);
 		surfaceLookUpRequests(surface);

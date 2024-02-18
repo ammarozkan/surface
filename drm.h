@@ -16,8 +16,6 @@ struct fb_dumb {
 
 struct DrmSystem {
 	uint32_t crtc_id;
-	struct fb_dumb* fb_back;
-	struct fb_dumb* fb_front;
 	drmModeRes* resources;
 	drmModeConnector* connector;
 
@@ -104,42 +102,6 @@ getCompatibleConnector(int drm_fd, drmModeRes* resource)
 	return result;
 }
 
-static inline struct fb_dumb*
-createDumbFrameBuffer(int drm_fd,drmModeConnector* conn)
-{
-	uint32_t width = conn->modes[0].hdisplay,
-		 height = conn->modes[0].vdisplay;
-	struct drm_mode_create_dumb create = {
-		.width = width,
-		.height = height,
-		.bpp = 32,
-	};
-
-	int ioctlret;
-
-	drmIoctl(drm_fd,DRM_IOCTL_MODE_CREATE_DUMB,&create);
-
-	struct fb_dumb* fb = malloc(sizeof(struct fb_dumb));
-	fb->handle = create.handle;
-	fb->stride = create.pitch;
-	fb->size = create.size;
-	fb->width = width;
-	fb->height = height;
-
-	uint32_t handles[4] = { fb->handle },
-		 strides[4] = { fb->stride },
-		 offsets[4] = { 0 };
-	drmModeAddFB2(drm_fd, width, height, DRM_FORMAT_XRGB8888,
-			handles, strides, offsets, &fb->id, 0);
-
-	struct drm_mode_map_dumb map = { .handle = fb->handle };
-	ioctlret = drmIoctl(drm_fd, DRM_IOCTL_MODE_MAP_DUMB, &map);
-	if (ioctlret < 0) perror("DRM_IOCTL_MODE_MAP_DUMB");
-	
-	fb->data = mmap(0, fb->size, PROT_READ | PROT_WRITE, MAP_SHARED,
-			drm_fd, map.offset);
-	return fb;
-}
 
 struct DrmSystem*
 initDRM(int drm_fd)
@@ -159,39 +121,34 @@ initDRM(int drm_fd)
 			resources->min_height,resources->max_height);
 	drmModeConnector *conn = getCompatibleConnector(drm_fd, resources);
 
-	struct fb_dumb* fb_back = createDumbFrameBuffer(drm_fd, conn);
-	struct fb_dumb* fb_front = createDumbFrameBuffer(drm_fd, conn);
-
 	uint32_t taken_crtcs = 0;
 	uint32_t crtc_id = find_crtc(drm_fd, resources, conn, &taken_crtcs);
-	drmModeSetCrtc(drm_fd, crtc_id, fb_front->id, 0, 0,
-			&conn->connector_id, 1, &conn->modes[0]);
+	//drmModeSetCrtc(drm_fd, crtc_id, fb_front->id, 0, 0,
+	//		&conn->connector_id, 1, &conn->modes[0]);
 	drmSystem->crtc_id = crtc_id;
-	drmSystem->fb_front = fb_front;
-	drmSystem->fb_back = fb_back;
 	drmSystem->resources = resources;
 	drmSystem->connector = conn;
 	return drmSystem;
 }
 
 int
-DrmSystemEnableFlip(int drm_fd,struct DrmSystem* drmSystem,void* data)
+DrmSystemEnableFlip(int drm_fd, struct DrmSystem* drmSystem,
+		uint32_t fb_id,void* data)
 {
-	int ret = drmModePageFlip(drm_fd, drmSystem->crtc_id, drmSystem->fb_front->id,
+	int ret = drmModePageFlip(drm_fd, drmSystem->crtc_id, fb_id,
 			DRM_MODE_PAGE_FLIP_EVENT, data);
-	if(ret < 0) perror("drmModePageFlip in EnableFlip thing.");
+	if(ret < 0) perror("drmModePageFlip error on DrmSystemEnableFlip");
 	return ret;
 }
-
 int
 drmVSyncFlip(int drm_fd, 
 		void (*page_flip_handler)(int, unsigned, unsigned, unsigned, void*))
 {
+	/*	
 	struct pollfd pollfd = {
 		.fd = drm_fd,
 		.events = POLLIN,
 	};
-
 	int ret = poll(&pollfd, 1, 0);
 	if(ret < 0 && errno != "EAGAIN") {
 		perror("poll");
@@ -207,4 +164,11 @@ drmVSyncFlip(int drm_fd,
 			return -1;
 		}
 	}
+	*/
+	drmEventContext context = {
+		.version = DRM_EVENT_CONTEXT_VERSION,
+		.page_flip_handler = page_flip_handler,
+	};
+	drmHandleEvent(drm_fd, &context);
+	
 }

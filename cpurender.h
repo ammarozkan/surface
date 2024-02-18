@@ -1,5 +1,76 @@
 #include "surface.h"
 
+// CPU Modifications for DRM
+
+struct DrmSystem_cpu {
+	uint32_t crtc_id;
+	struct CPUFrameBuffer* fb;
+	drmModeRes* resources;
+	drmModeConnector* connector;	
+};
+
+struct CPUFrameBuffer {
+	struct fb_dumb* fb_back;
+	struct fb_dumb* fb_front;
+};
+
+struct fb_dumb*
+createDumbFrameBuffer(int drm_fd,drmModeConnector* conn)
+{
+	uint32_t width = conn->modes[0].hdisplay,
+		 height = conn->modes[0].vdisplay;
+	struct drm_mode_create_dumb create = {
+		.width = width,
+		.height = height,
+		.bpp = 32,
+	};
+
+	int ioctlret;
+
+	drmIoctl(drm_fd,DRM_IOCTL_MODE_CREATE_DUMB,&create);
+
+	struct fb_dumb* fb = malloc(sizeof(struct fb_dumb));
+	fb->handle = create.handle;
+	fb->stride = create.pitch;
+	fb->size = create.size;
+	fb->width = width;
+	fb->height = height;
+
+	uint32_t handles[4] = { fb->handle },
+		 strides[4] = { fb->stride },
+		 offsets[4] = { 0 };
+	drmModeAddFB2(drm_fd, width, height, DRM_FORMAT_XRGB8888,
+			handles, strides, offsets, &fb->id, 0);
+
+	struct drm_mode_map_dumb map = { .handle = fb->handle };
+	ioctlret = drmIoctl(drm_fd, DRM_IOCTL_MODE_MAP_DUMB, &map);
+	if (ioctlret < 0) {
+		perror("DRM_IOCTL_MODE_MAP_DUMB");
+		return NULL;
+	}
+	
+	fb->data = mmap(0, fb->size, PROT_READ | PROT_WRITE, MAP_SHARED,
+			drm_fd, map.offset);
+	return fb;
+}
+
+struct CPUFrameBuffer*
+initCPUDumbs(int drm_fd,struct DrmSystem* drmSystem)
+{
+	struct CPUFrameBuffer* result = malloc(sizeof(struct CPUFrameBuffer));
+	struct fb_dumb* fbd;
+	fbd = createDumbFrameBuffer(drm_fd, drmSystem->connector);
+	if(fbd == NULL) return NULL;
+	result->fb_front = fbd;
+	
+	fbd = createDumbFrameBuffer(drm_fd, drmSystem->connector);
+	if(fbd == NULL) return NULL;
+	result->fb_back = fbd;
+
+	return result;
+}
+
+// Actual Rendering
 
 static inline uint8_t*
 getColor(uint32_t x, uint32_t y)
