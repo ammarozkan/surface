@@ -106,6 +106,8 @@ struct Window*
 createWindow(uint32_t sx, uint32_t sy, 
 	     uint32_t ex, uint32_t ey)
 {
+	uint8_t white[4] = {0xff,0xff,0xff,0xff};
+	
 	printf("WINDOWCREATION!\n");
 	struct Window* result = malloc(sizeof(struct Window));
 	result->prev = NULL;
@@ -118,7 +120,6 @@ createWindow(uint32_t sx, uint32_t sy,
 	result->elements = NULL;
 	result->next = NULL;
 	result->client = NULL;
-	uint8_t white[4] = {0xff,0xff,0xff,0xff};
 	memcpy(result->bckr_colour, white, 4);
 	return result;
 }
@@ -146,24 +147,25 @@ surfaceAddWindow(struct Surface* surface,
 	     		uint32_t ex, uint32_t ey)
 {
 	surfaceAddSpecificWindow(surface, createWindow(sx,sy,ex,ey));
-	//struct Window** lastnull;
-	//for(lastnull = &surface->wins ; *lastnull!=NULL ; lastnull=&(*lastnull)->next);
-					/// OHOHOHHHHMMMMMMM I loved that.
-	//*lastnull = createWindow(sx,sy,ex,ey); // besides beutifility (booooop) these loops are killing the program.
-	// but you know what? Im not gonna delete that loop from here, im just gonna comment it. That loop is sick.
 }
 
 
-void surfaceAddWindow_quick(struct Surface* surface)
+void 
+surfaceAddWindow_quick(struct Surface* surface)
 {
 	static uint32_t lastPos = 0;
-	lastPos += 30; if(lastPos > 1000) lastPos = 30;
-	surfaceAddWindow(surface,
-			lastPos, lastPos, 400+lastPos, 300+lastPos);
+	
+	lastPos += 30; 
+	if(lastPos > 1000) lastPos = 30;
+
+	surfaceAddWindow(surface, lastPos, lastPos, 
+			400+lastPos, 300+lastPos);
+	
 	surface->focus = surface->lastWindow;
 }
 
-void surfaceMoveMainWindowLeft_quick(struct Surface* surface)
+void 
+surfaceMoveMainWindowLeft_quick(struct Surface* surface)
 {
 	surface->focus->sx += 10;
 	surface->focus->ex += 10;
@@ -199,7 +201,7 @@ surfacePutWindowTop(struct Surface* surface, struct Window* window)
 void
 surfaceCloseWindow(struct Surface* surface, struct Window* window)
 {
-	// destroy elements
+	// surfaceDestroyWindowElements()
 	if(window->prev != NULL) window->prev->next = window->next;
 	else surface->wins = window->next;
 
@@ -216,7 +218,9 @@ int
 constantWindowCloseButtonControl(uint32_t x, uint32_t y, struct Window* window)
 {
 	int ycontrol = window->sy - WINDOW_UNTIL_BUTTON_THICKNESS - WINDOW_ROOF_BUTTON_THICKNESS < y && y < window->sy - WINDOW_UNTIL_BUTTON_THICKNESS;
+
 	int xcontrol = window->sx + WINDOW_SPACE_FROM_START < x && x < window->sx + WINDOW_GENERIC_ROOF_BUTTON_WIDTH;
+
 	return xcontrol && ycontrol;
 }
 
@@ -224,7 +228,7 @@ void
 clickWindowInside(struct Surface* surface, 
 		struct Window* window, unsigned short code)
 {
-
+	// window send event.
 }
 
 void
@@ -237,8 +241,7 @@ clickWindow(struct Surface* surface, struct Window* window,
 	surface->focus = window;
 	
 	if(constantWindowCloseButtonControl(surface->cursor.x, 
-					    surface->cursor.y, 
-					    window)) {
+			surface->cursor.y, window)) {
 		surfaceCloseWindow(surface,window);
 	} else if(window->sx < surface->cursor.x && 
 			surface->cursor.x < window->ex &&
@@ -276,10 +279,12 @@ clickSurface(struct Surface* surface, unsigned short code,
 	printf("Surface Click!\n");
 
 	uint32_t x = surface->cursor.x, y = surface->cursor.y;
-	for(struct Window* elmWindow = surface->lastWindow;elmWindow!=NULL;elmWindow = elmWindow->prev)
+	
+	SURF_ITERATE(struct Window, surface->wins, win)
 	{
-		if(elmWindow->sx < x && x < elmWindow->ex &&
-				elmWindow->sy - WINDOW_ROOF_THICKNESS < y && y < elmWindow->ey)
+		if(win->sx < x && x < win->ex &&
+			win->sy - WINDOW_ROOF_THICKNESS < y 
+			&& y < win->ey)
 		{
 			clickWindow(surface, elmWindow, code);
 			return;
@@ -335,7 +340,7 @@ surfaceMoveCursor(struct Surface* surface, uint32_t x, uint32_t y)
 
 /*
  *
- *  Server Stuff
+ *  Server Request Handlers
  *
  */
 
@@ -345,20 +350,21 @@ surfaceWorkOnRequest(struct Surface* surface, struct Window* win)
 	struct ProgramRequestBase* base 
 		= ezySurfaceReceiveRequestBase(win->client);
 	if (base==NULL) return;
+	
 	switch (base->requestType)
 	{
 	case PROGRAM_REQUEST_KILL:
-		printf("Wellll....\n");
+		printf("Kill Request\n");
 		struct ProgramRequest_kill* kill_req
 			= ezySurfaceReceiveKillRequest(win->client);
 		if(kill_req!=NULL) {
-			printf("BOOOM TO YOUR HEAD MTF\n");
+			printf("Window Kill\n");
 			surfaceCloseWindow(surface,win);
 			free(kill_req);
 		}
 		break;
 	default:
-		printf("Uhm.\n");
+		printf("An request can't understanded.\n");
 	}
 	free(base);
 }
@@ -378,17 +384,21 @@ surfaceLookUpClients(struct Surface* surface,int server_fd)
 {
 	struct ezySurfaceClient* surfaceClient = 
 		ezySurfaceLookUpClients(server_fd);
+	
 	if(surfaceClient == NULL) return;
 	
 	struct ProgramFirstRequest* req = 
 		ezySurfaceFirstRequestReceive(surfaceClient);
+	
 	if(req==NULL) return;
 	
 	struct Window* window = createWindow(30, 30,
 			30 + req->windowsize_x,
 			30 + req->windowsize_y);
+	
 	window->client = surfaceClient;
 	memcpy(window->bckr_colour, req->bckr_colour, 4);
+	
 	surfaceAddSpecificWindow(surface, window);
 }
 

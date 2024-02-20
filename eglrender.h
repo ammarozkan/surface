@@ -32,12 +32,12 @@ struct EGL {
 	EGLSurface surface;
 };
 
-int active_drm_fd;
+int active_drm_fd; // experimental usage. could changed.
 
 struct GBM*
 init_gbm(int drm_fd, uint32_t hdisplay, uint32_t vdisplay)
 {
-	active_drm_fd = drm_fd;
+	active_drm_fd = drm_fd; // experimental usage. could changed.
 	struct GBM* result = malloc(sizeof(struct GBM));
 
 	result->dev = gbm_create_device(drm_fd);
@@ -46,6 +46,7 @@ init_gbm(int drm_fd, uint32_t hdisplay, uint32_t vdisplay)
 			hdisplay, vdisplay,
 			GBM_FORMAT_XRGB8888,
 			GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
+	
 	if(!result->surface) {
 		perror("failed to create gbm surface");
 	}
@@ -55,8 +56,9 @@ init_gbm(int drm_fd, uint32_t hdisplay, uint32_t vdisplay)
 struct GBM*
 init_gbm_from_connector(int drm_fd, drmModeConnector* conn)
 {
-	uint32_t width = conn->modes[0].hdisplay,
-		 height = conn->modes[0].vdisplay;
+	uint32_t width = conn->modes[0].hdisplay;
+	uint32_t height = conn->modes[0].vdisplay;
+
 	return init_gbm(drm_fd, width, height);
 }
 
@@ -220,6 +222,7 @@ init_gl(struct GBM* gbm)
 }
 
 
+// Actual Rendering
 
 void render_surface(struct Surface* surface)
 {
