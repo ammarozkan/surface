@@ -130,7 +130,9 @@ int cuTouchscreenEventread(int fd, struct ControlUnit* cu)
 {
 	struct input_event ev;
 	errno = 0;
-	unsigned int size = read(fd, &ev, sizeof(struct input_event));
+	unsigned int size = 0;
+	
+	size = read(fd, &ev, sizeof(struct input_event));
 	if(errno == EAGAIN) {
 		return 0;
 	} else if(size < sizeof(struct input_event)) {

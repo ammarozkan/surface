@@ -16,7 +16,8 @@ unsigned int j = 0; // u know the drill
 
 #include "drm.h"
 #include "surface.h"
-#include "cpurender.h"
+//#include "cpurender.h"
+#include "eglrender.h"
 
 #include "controlunit.h"
 
@@ -25,6 +26,9 @@ unsigned int j = 0; // u know the drill
 #include <xf86drmMode.h>
 
 #define BETWEEN(a,x,b) (x < b && a < x) // a < x < b
+
+#define SURFACE_GPURENDER
+//#define SURFACE_CPURENDER
 
 struct drme_specs
 {
@@ -37,8 +41,11 @@ struct drme_specs
 
 struct ProgramStruct {
 	struct DrmSystem* drmSystem;
-	void* fb;
 	struct Surface* surface;
+	void* fb;
+
+	struct EGL* egl;
+	struct GBM* gbm;
 };
 
 struct drme_specs*
@@ -61,6 +68,7 @@ argWork(int argc, char* argv[])
 	return drmesptr;
 }
 
+#if defined(SURFACE_CPURENDER)
 static void
 cpu_page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
 		unsigned tv_usec, void* data)
@@ -99,13 +107,54 @@ cpu_page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
 	fb_cpu->fb_front = fb;
 	//DrmSystemEnableFlip(drm_fd,drmSys);
 }
+#elif defined(SURFACE_GPURENDER)
+static void
+gpu_page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
+		unsigned tv_usec, void* data)
+{
+	(void)sequence;
+	(void)tv_sec;
+	(void)tv_usec;
+
+	struct ProgramStruct* programStruct = data;
+	struct DrmSystem* drmSystem = programStruct->drmSystem;
+	//struct drm_fb* fb = programStruct->fb;
+	// render here
+	
+	render_surface(programStruct->surface);
+	eglSwapBuffers(programStruct->egl->display,
+		       programStruct->egl->surface);
+
+	//struct drm_fb* newfb = get_drm_fb_from_gbm(drm_fd,
+	//		programStruct->gbm);
+	
+	struct gbm_bo* bo = ((struct drm_fb*)programStruct->fb)->bo;
+	struct gbm_bo* next_bo = gbm_surface_lock_front_buffer(programStruct->gbm->surface);
+	struct drm_fb* fb = get_drm_fb_from_bo(drm_fd,next_bo);
+	
+	if(drmModePageFlip(drm_fd, drmSystem->crtc_id, fb->id,
+				DRM_MODE_PAGE_FLIP_EVENT, data) < 0)
+	{
+		perror("drmModePageFlip");
+	}
+
+	gbm_surface_release_buffer(programStruct->gbm->surface,
+			bo);
+
+	//gbm_surface_release_buffer(programStruct->gbm->surface,
+	//		fb->bo);
+	
+	((struct drm_fb*)programStruct->fb)->bo = next_bo;
+	//fb->bo = newfb->bo;
+}
+#endif
 
 uint32_t getChangedRange(uint32_t value, uint32_t old, uint32_t new)
 {
 	return ((float)new)*((float)value)
 			/((float)old);
 }
-
+#if defined(SURFACE_CPURENDER)
 void TouchscreenPositionX(unsigned int value,struct ProgramStruct* data)
 {
 	uint32_t width = ((struct CPUFrameBuffer*)data->fb)->fb_front->width;
@@ -119,7 +168,21 @@ void TouchscreenPositionY(unsigned int value, struct ProgramStruct* data)
 	uint32_t newy = getChangedRange(value, 32000, height);
 	surfaceMoveCursorY(data->surface, newy);
 }
+#elif defined(SURFACE_GPURENDER)
+void TouchscreenPositionX(unsigned int value,struct ProgramStruct* data)
+{
+	//uint32_t width = ((struct CPUFrameBuffer*)data->fb)->fb_front->width;
+	//uint32_t newx = getChangedRange(value, 32000, width);
+	//surfaceMoveCursorX(data->surface, newx);
+}
 
+void TouchscreenPositionY(unsigned int value, struct ProgramStruct* data)
+{
+	//uint32_t height = ((struct CPUFrameBuffer*)data->fb)->fb_front->height;
+	//uint32_t newy = getChangedRange(value, 32000, height);
+	//surfaceMoveCursorY(data->surface, newy);
+}
+#endif
 void TouchscreenClick(struct ProgramStruct* data,unsigned short code,unsigned int value)
 {
 	clickSurface(data->surface,code,value);
@@ -158,17 +221,43 @@ main(int argc, char* argv[])
 		malloc(sizeof(struct ProgramStruct));
 	printf("Program Sruct allocated.\n");
 	
-	programStruct->fb = initCPUDumbs(drm_fd, drmSystem);
+	//programStruct->fb = initCPUDumbs(drm_fd, drmSystem);
+	//
+	printf("Init GBM\n");
+	programStruct->gbm = init_gbm_from_connector(drm_fd,
+			drmSystem->connector);
+	printf("Init GL.\n");
+	programStruct->egl = init_gl(programStruct->gbm);
+
+	render_surface(programStruct->surface);	
 	
+	eglSwapBuffers(programStruct->egl->display,
+			programStruct->egl->surface);
+	printf("Init frame buffer\n");
+	programStruct->fb = get_drm_fb_from_gbm(drm_fd,
+		       	programStruct->gbm);
+
 	printf("Start Render.\n");
 	programStruct->drmSystem = drmSystem;
-	render_dumbbuffer(((struct CPUFrameBuffer*)programStruct->fb)->fb_back);
-	render_dumbbuffer(((struct CPUFrameBuffer*)programStruct->fb)->fb_front);
+	
+	// Rendering bckr on start looks better.	
+	//render_dumbbuffer(((struct CPUFrameBuffer*)programStruct->fb)
+	//		->fb_back);
+	//render_dumbbuffer(((struct CPUFrameBuffer*)programStruct->fb)
+	//		->fb_front);
+	
+	//DrmSystemEnableFlip(drm_fd, drmSystem, 
+	//		getActiveCPUFBId(programStruct->fb), 
+	//		programStruct); // CPU RENDER
+	
+	DrmSystemEnableFlip(drm_fd, drmSystem, 
+			((struct drm_fb*)programStruct->fb)->id,
+			programStruct); // GPU RENDER
+	
 	
 	printf("Surface Main Program Creation.\n");
 	struct Surface* surface = createSurface();
 	programStruct->surface = surface;
-	DrmSystemEnableFlip(drm_fd, drmSystem, ((struct CPUFrameBuffer*)programStruct->fb)->fb_front->id, programStruct);
 
 
 	printf("Control Unit\n");
@@ -188,7 +277,8 @@ main(int argc, char* argv[])
 		// Control
 		int cresult = cuEventRead(&controlUnit);
 		
-		drmVSyncFlip(drm_fd,cpu_page_flip_handler);
+		//drmVSyncFlip(drm_fd,cpu_page_flip_handler); // CPU
+		drmVSyncFlip(drm_fd,gpu_page_flip_handler); // GPU
 
 		surfaceLookUpClients(surface,unixserver);
 		surfaceLookUpRequests(surface);

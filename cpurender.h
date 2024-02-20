@@ -54,6 +54,12 @@ createDumbFrameBuffer(int drm_fd,drmModeConnector* conn)
 	return fb;
 }
 
+uint32_t
+getActiveCPUFBId(struct CPUFrameBuffer* fb)
+{
+	return fb->fb_front->id;
+}
+
 struct CPUFrameBuffer*
 initCPUDumbs(int drm_fd,struct DrmSystem* drmSystem)
 {
