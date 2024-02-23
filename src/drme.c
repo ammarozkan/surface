@@ -236,6 +236,9 @@ main(int argc, char* argv[])
 	printf("Init GL.\n");
 	programStruct->egl = init_gl(programStruct->gbm);
 
+	initBuffers();
+	initPrograms();
+	
 	render_surface(programStruct->surface);	
 	
 	eglSwapBuffers(programStruct->egl->display,
@@ -243,6 +246,7 @@ main(int argc, char* argv[])
 	printf("Init frame buffer\n");
 	programStruct->fb = get_drm_fb_from_gbm(drm_fd,
 		       	programStruct->gbm);
+
 
 	printf("Start Render.\n");
 	DrmSystemEnableFlip(drm_fd, drmSystem, 
@@ -296,6 +300,9 @@ main(int argc, char* argv[])
 	}
 	
 closeprogram:
+	destroyBuffers();
+	destroyPrograms();
+
 	drmModeFreeResources(drmSystem->resources);
 	close(drm_fd);
 
