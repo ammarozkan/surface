@@ -18,6 +18,8 @@ struct drm_fb {
 struct GBM {
 	struct gbm_device* dev;
 	struct gbm_surface* surface;
+
+	uint32_t hdisplay, vdisplay;
 };
 
 struct EGL {
@@ -45,6 +47,10 @@ init_gbm(int drm_fd, uint32_t hdisplay, uint32_t vdisplay)
 	if(!result->surface) {
 		perror("failed to create gbm surface");
 	}
+
+	result->hdisplay = hdisplay;
+	result->vdisplay = vdisplay;
+
 	return result;
 }
 
@@ -56,18 +62,6 @@ init_gbm_from_connector(int drm_fd, drmModeConnector* conn)
 
 	return init_gbm(drm_fd, width, height);
 }
-
-/*
-static void
-drm_fb_destroy_callback(struct gbm_bo* bo, void* data)
-{
-	struct drm_fb* fb = data;
-	struct gbm_device* gbm = gbm_bo_get_device(bo);
-
-	if(fb->id)
-		drmModeRmFB(drm.fd, fb->id);
-}
-*/
 
 static void
 drm_fb_destroy_callback(struct gbm_bo* bo, void* data)

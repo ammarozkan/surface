@@ -135,7 +135,8 @@ gpu_page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
 	//		programStruct->gbm);
 	
 	struct gbm_bo* bo = ((struct drm_fb*)programStruct->fb)->bo;
-	struct gbm_bo* next_bo = gbm_surface_lock_front_buffer(programStruct->gbm->surface);
+	struct gbm_bo* next_bo = 
+		gbm_surface_lock_front_buffer(programStruct->gbm->surface);
 	struct drm_fb* fb = get_drm_fb_from_bo(drm_fd,next_bo);
 	
 	if(drmModePageFlip(drm_fd, drmSystem->crtc_id, fb->id,
@@ -177,16 +178,16 @@ void TouchscreenPositionY(unsigned int value, struct ProgramStruct* data)
 #elif defined(SURFACE_GPURENDER)
 void TouchscreenPositionX(unsigned int value,struct ProgramStruct* data)
 {
-	//uint32_t width = ((struct CPUFrameBuffer*)data->fb)->fb_front->width;
-	//uint32_t newx = getChangedRange(value, 32000, width);
-	//surfaceMoveCursorX(data->surface, newx);
+	uint32_t width = data->gbm->hdisplay;
+	uint32_t newx = getChangedRange(value, 32000, width);
+	surfaceMoveCursorX(data->surface, newx);
 }
 
 void TouchscreenPositionY(unsigned int value, struct ProgramStruct* data)
 {
-	//uint32_t height = ((struct CPUFrameBuffer*)data->fb)->fb_front->height;
-	//uint32_t newy = getChangedRange(value, 32000, height);
-	//surfaceMoveCursorY(data->surface, newy);
+	uint32_t height = data->gbm->vdisplay;
+	uint32_t newy = getChangedRange(value, 32000, height);
+	surfaceMoveCursorY(data->surface, newy);
 }
 #endif
 void TouchscreenClick(struct ProgramStruct* data,unsigned short code,unsigned int value)
@@ -209,6 +210,14 @@ main(int argc, char* argv[])
 {
 	printf("drme working out.\n");
 	
+	struct ProgramStruct* programStruct = 
+		malloc(sizeof(struct ProgramStruct));
+	printf("Program Sruct allocated.\n");
+	
+	printf("Surface Main Program Creation.\n");
+	struct Surface* surface = createSurface();
+	programStruct->surface = surface;
+	
 	struct drme_specs* drmesptr = argWork(argc,argv);
 	printf("Specs:\n");
 	printf("GPU:%s\n",drmesptr->gpupath);
@@ -223,9 +232,6 @@ main(int argc, char* argv[])
 	struct DrmSystem* drmSystem = initDRM(drm_fd);
        	printf("DRM Init.\n");	
 	printf("CPU Render Init.\n");
-	struct ProgramStruct* programStruct = 
-		malloc(sizeof(struct ProgramStruct));
-	printf("Program Sruct allocated.\n");
 	
 	programStruct->drmSystem = drmSystem;
 	
@@ -239,6 +245,12 @@ main(int argc, char* argv[])
 	initBuffers();
 	initPrograms();
 	
+	printf("PROGRAMSCREENSIZE:%u/%u\n",
+			programStruct->gbm->hdisplay,
+			programStruct->gbm->vdisplay);	
+	initProgramScreenSize(programStruct->gbm->hdisplay,
+			programStruct->gbm->vdisplay);
+
 	render_surface(programStruct->surface);	
 	
 	eglSwapBuffers(programStruct->egl->display,
@@ -267,9 +279,6 @@ main(int argc, char* argv[])
 	#endif
 	
 	
-	printf("Surface Main Program Creation.\n");
-	struct Surface* surface = createSurface();
-	programStruct->surface = surface;
 
 
 	printf("Control Unit\n");

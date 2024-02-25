@@ -5,93 +5,134 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 
+#include "gltools.h"
+
 static struct
 {
-	GLuint windowBase;
+	GLuint rectangle;
+	GLuint vCursor;
 }*surfaceBuffers;
 
 static struct
 {
-	GLuint dShader_vertex;
-	GLuint dShader_fragment;
-	GLuint dProgram;
+	GLuint dWindowVertex;
+	GLuint dWindowFragment;
+	GLuint dWindowProgram;
+	GLint d_w_s;
+	GLint d_w_e;
+
+	GLuint dCursorVertex;
+	GLuint dCursorFragment;
+	GLuint dCursorProgram;
+	GLint CursorProgram_cursorPos;
+
 }*surfacePrograms;
-
-const char* dVertex_src =
-	"attribute vec2 position; "
-	"vec2 screen = vec2(800,600);"
-	"vec2 w_pos = vec2(100,100);"
-	"vec2 w_size = vec2(100,300);"
-	"vec2 result;"
-	"void main()"
-	"{"
-	"vec2 normd = vec2(position.x*w_size.x + w_pos.x, position.y*w_size.y + w_pos.y);"
-	"normd = vec2(normd.x/screen.x, normd.y/screen.y);"
-	"result = vec2(2.0*normd.x-1.0, "
-		"1.0-2.0*normd.y);"
-	"gl_Position = vec4(result, 0.0, 1.0);"
-	"}";
-
-const char* dFragment_src =
-	"void main()"
-	"{"
-	"gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);"
-	"}";
-
-void
-compileShader(GLuint shaderid, const char* source)
-{
-	glShaderSource(shaderid, 1, 
-			&source, NULL);
-
-	char infoLog[256]; 
-	GLsizei infoLength = 255;
-	
-	glGetShaderInfoLog(shaderid, sizeof(infoLog),
-			&infoLength, infoLog);
-	printf("CompileLog:%s\n",infoLog);
-}
-
-GLuint getShader(const char* src, GLenum type);
-GLuint getProgram(GLuint vert,GLuint frag);
 
 void
 initBuffers()
 {
-	GLuint dShader_vertex;
-	GLuint dShader_fragment;
-	
-	surfaceBuffers = malloc(sizeof(*surfaceBuffers));
-
-	glGenBuffers(1,&surfaceBuffers->windowBase);
-
 	// [x][y]
-	float windowBody[] = {
+	float rectangle[] = {
 		0.0f, 0.0f,
 		0.0f, 1.0f,
 		1.0f, 0.0f,
 		1.0f, 1.0f
 	};
-	glBindBuffer(GL_ARRAY_BUFFER, surfaceBuffers->windowBase);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(windowBody),
-			windowBody, GL_STATIC_DRAW);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 
-			sizeof(float)*2,0);
+
+	float vCursor[] = {
+		1.0f, 0.0f,
+		0.0f, 0.0f,
+		0.4f, 0.4f,
+		0.0f, 1.0f
+	};
+	
+	surfaceBuffers = malloc(sizeof(*surfaceBuffers));
+
+	surfaceBuffers->rectangle = create2dBuffer(rectangle, sizeof(rectangle));
+	//surfaceBuffers->vCursor = create2dBuffer(vCursor, sizeof(vCursor));
 
 }
 
 void
 destroyBuffers()
 {
-	glDeleteBuffers(1,&surfaceBuffers->windowBase);
+	glDeleteBuffers(1,&surfaceBuffers->rectangle);
 	free(surfaceBuffers);
+}
+
+int
+initWindowProgram()
+{
+	surfacePrograms->dWindowVertex = 
+		getShaderFromFile("shaders/dWindowVertex.glsl", 
+				GL_VERTEX_SHADER);
+	
+	if(!surfacePrograms->dWindowVertex) {
+		printf("dWindowVertex shader couldn't be created.\n");
+		return 0;
+	}
+
+	surfacePrograms->dWindowFragment =
+		getShaderFromFile("shaders/dWindowFragment.glsl", 
+				GL_FRAGMENT_SHADER);
+	
+	if(!surfacePrograms->dWindowFragment) {
+		printf("dWindowFragment shader couldn't be created.\n");
+		return 0;
+	}
+	
+	surfacePrograms->dWindowProgram = 
+		getProgram(surfacePrograms->dWindowVertex,
+				surfacePrograms->dWindowFragment);
+	glBindAttribLocation(surfacePrograms->dWindowProgram, 0, "position");
+
+	if(!linkProgram(surfacePrograms->dWindowProgram)) return 0;
+
+	surfacePrograms->d_w_s = glGetUniformLocation(
+			surfacePrograms->dWindowProgram, "w_s");
+	surfacePrograms->d_w_e = glGetUniformLocation(
+			surfacePrograms->dWindowProgram, "w_e");
+	return 1;
+}
+
+int
+initCursorProgram()
+{
+	surfacePrograms->dCursorVertex = 
+		getShaderFromFile("shaders/dCursorVertex.glsl",
+				GL_VERTEX_SHADER);
+	if(!surfacePrograms->dCursorVertex) {
+		printf("dCursorVertex shader couldn't be created.\n");
+		return 0;
+	}
+
+	surfacePrograms->dCursorFragment =
+		getShaderFromFile("shaders/dCursorFragment.glsl",
+				GL_FRAGMENT_SHADER);
+
+	if(!surfacePrograms->dCursorFragment) {
+		printf("dCursorFragment shader couldn't be created.\n");
+		return 0;
+	}
+
+	surfacePrograms->dCursorProgram =
+		getProgram(surfacePrograms->dCursorVertex,
+				surfacePrograms->dCursorFragment);
+	glBindAttribLocation(surfacePrograms->dCursorProgram, 0, "model_pos");
+	
+	if(!linkProgram(surfacePrograms->dCursorProgram)) return 0;
+
+	surfacePrograms->CursorProgram_cursorPos =
+		glGetUniformLocation(surfacePrograms->dCursorProgram, 
+				"cursorPos");
+	return 1;
 }
 
 int
 initPrograms()
 {
 	GLint ivRes;
+	char* loadedFile;
 
 	surfacePrograms = malloc(sizeof(*surfacePrograms));
 
@@ -106,25 +147,11 @@ initPrograms()
 			"Please contact so"
 			"me support.\n");
 
-	surfacePrograms->dShader_vertex = 
-		getShader(dVertex_src, GL_VERTEX_SHADER);
-	
-	surfacePrograms->dShader_fragment = 
-		getShader(dFragment_src, GL_FRAGMENT_SHADER);
-	
-	if(!(surfacePrograms->dShader_vertex && 
-				surfacePrograms->dShader_fragment))
-	{
-		printf("One of the shaders are not "
-			"did their job correctly.\n");
+	if(!initWindowProgram()) {
+		return 0;
+	} else if(!initCursorProgram()) {
 		return 0;
 	}
-	else {
-		printf("I think shaders will work.\n");
-	}
-	surfacePrograms->dProgram = 
-		getProgram(surfacePrograms->dShader_vertex,
-				surfacePrograms->dShader_fragment);
 
 	glReleaseShaderCompiler();
 
@@ -134,89 +161,65 @@ initPrograms()
 void
 destroyPrograms()
 {
-	glDeleteProgram(surfacePrograms->dProgram);
+	glDeleteProgram(surfacePrograms->dWindowProgram);
 
-	glDeleteShader(surfacePrograms->dShader_vertex);
-	glDeleteShader(surfacePrograms->dShader_fragment);
+	glDeleteShader(surfacePrograms->dWindowVertex);
+	glDeleteShader(surfacePrograms->dWindowFragment);
 }
 
-GLuint
-getShader(const char* src,GLenum shaderType)
+
+void
+initProgramScreenSize(uint32_t width, uint32_t height)
 {
-	char infoLog[256]; 
-	GLsizei infoLength = 255;
-	GLuint sid;
+	GLuint wsize_uniform;
+	glUseProgram(surfacePrograms->dWindowProgram);
+	wsize_uniform = glGetUniformLocation(
+			surfacePrograms->dWindowProgram, "screen_size");
 	
-	if((sid = glCreateShader(shaderType)) == 0) {
-		printf("Shader creation problem."
-			"peace. GLERR:%i\n",glGetError());
-		return 0;
+	if(wsize_uniform == 0) {
+		printf("Uniform %s NOT FOUND!\n", "screen_size");
+		return;
 	}
-	glShaderSource(sid, 1, &src, NULL);	
-	glCompileShader(sid);
-
 	
-	glGetShaderInfoLog(sid, sizeof(infoLog),
-			&infoLength, infoLog);
-	printf("CompileLog:%s\n",infoLog);
-
-	GLint compileStat;
-	glGetShaderiv(sid, GL_COMPILE_STATUS, &compileStat);
-	
-	if(compileStat != GL_TRUE) {
-		printf("Compile NOT succesful brah."
-			"peace. GLERR:%i\n",glGetError());
-		return 0;
-	} else {	
-		printf("Compile succesful brah."
-			"peace. GLERR:%i\n",glGetError());
-	}
-
-	return sid;
-}
-
-GLuint
-getProgram(GLuint vertexShader, GLuint fragmentShader)
-{
-	GLuint programid, ivRes;
-
-	programid = glCreateProgram();
-	if(programid == 0) {
-		printf("Program couldn't be created."
-			" peace. GLERR:%i\n",glGetError());
-		return 0;
-	}
-
-	glAttachShader(programid, vertexShader);
-	glAttachShader(programid, fragmentShader);
-
-	glLinkProgram(programid);
-
-	glGetProgramiv(programid, GL_LINK_STATUS, &ivRes);
-	if(ivRes == GL_FALSE) {
-		printf("Program couldn't be linked."
-			"peace. GLERR:%i\n",glGetError());
-		return 0;
-	}
-
-	return programid;
-
+	glUniform2f(wsize_uniform, (float)width, (float)height);
 }
 
 void
-drawWindowBuffer()
+drawCursorBuffer(struct QuickCursor qc)
 {
-	glUseProgram(surfacePrograms->dProgram);
-	glBindBuffer(GL_ARRAY_BUFFER, surfaceBuffers->windowBase);
+	float posx = qc.x, posy = qc.y;
+	glUseProgram(surfacePrograms->dCursorProgram);
+	glUniform2f(surfacePrograms->CursorProgram_cursorPos, posx, posy);
+
+	glBindBuffer(GL_ARRAY_BUFFER, surfaceBuffers->vCursor);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+void
+drawWindowBuffer(float sx, float sy, float ex, float ey)
+{
+	glUseProgram(surfacePrograms->dWindowProgram);
+	glUniform2f(surfacePrograms->d_w_s, sx, sy);
+	glUniform2f(surfacePrograms->d_w_e, ex, ey);
+
+	glBindBuffer(GL_ARRAY_BUFFER, surfaceBuffers->rectangle);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
 
 // Actual Rendering
 
-void render_surface(struct Surface* surface)
+void render_surface(struct Surface* surf)
 {
 	glClearColor(0.2, 0.2, 0.2, 1.0);
 	glClear(GL_COLOR_BUFFER_BIT);
-	drawWindowBuffer();
+	
+	SURF_ITERATE(struct Window, surf->wins, win)
+	{
+		drawWindowBuffer(win->sx, win->sy,
+				win->ex, win->ey);
+	}
+//	drawWindowBuffer(100.0f, 100.0f, 300.0f, 200.0f);
+	drawCursorBuffer(surf->cursor);
+
 }
