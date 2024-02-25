@@ -51,6 +51,7 @@ initBuffers()
 	surfaceBuffers->rectangle = create2dBuffer(rectangle, sizeof(rectangle));
 	//surfaceBuffers->vCursor = create2dBuffer(vCursor, sizeof(vCursor));
 
+	glClearColor(0.2, 0.2, 0.2, 1.0);
 }
 
 void
@@ -125,6 +126,10 @@ initCursorProgram()
 	surfacePrograms->CursorProgram_cursorPos =
 		glGetUniformLocation(surfacePrograms->dCursorProgram, 
 				"cursorPos");
+	if(!surfacePrograms->CursorProgram_cursorPos) {
+		printf("cursorPos uniform not found in cursor program.\n");
+		return 0;
+	}
 	return 1;
 }
 
@@ -182,6 +187,13 @@ initProgramScreenSize(uint32_t width, uint32_t height)
 	}
 	
 	glUniform2f(wsize_uniform, (float)width, (float)height);
+	
+	GLuint csize_uniform;
+	glUseProgram(surfacePrograms->dCursorProgram);
+	csize_uniform = glGetUniformLocation(
+			surfacePrograms->dCursorProgram, "screen_size");
+	
+	glUniform2f(csize_uniform, (float)width, (float)height);
 }
 
 void
@@ -211,7 +223,6 @@ drawWindowBuffer(float sx, float sy, float ex, float ey)
 
 void render_surface(struct Surface* surf)
 {
-	glClearColor(0.2, 0.2, 0.2, 1.0);
 	glClear(GL_COLOR_BUFFER_BIT);
 	
 	SURF_ITERATE(struct Window, surf->wins, win)

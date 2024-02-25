@@ -52,6 +52,8 @@ struct ProgramStruct {
 
 	struct EGL* egl;
 	struct GBM* gbm;
+
+	int unixserver;
 };
 
 struct drme_specs*
@@ -152,9 +154,24 @@ gpu_page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
 	//		fb->bo);
 	
 	((struct drm_fb*)programStruct->fb)->bo = next_bo;
-	//fb->bo = newfb->bo;
+	//fb->bo = newfb->bo;	
 }
 #endif
+
+static void
+page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
+		unsigned tv_usec, void* data)
+{
+#if defined(SURFACE_GPURENDER)
+	gpu_page_flip_handler(drm_fd, sequence, tv_sec, tv_usec, data);
+#elif defined(SURFACE_CPURENDER)
+	cpu_page_flip_handler(drm_fd, sequence, tv_sec, tv_usec, data);
+#endif
+	struct ProgramStruct* programStruct = data;
+	
+	surfaceLookUpClients(programStruct->surface,programStruct->unixserver);
+	surfaceLookUpRequests(programStruct->surface);
+}
 
 uint32_t getChangedRange(uint32_t value, uint32_t old, uint32_t new)
 {
@@ -292,20 +309,20 @@ main(int argc, char* argv[])
 	controlUnit.TouchscreenClick = TouchscreenClick;
 
 	printf("UNIX Server.\n");
-	int unixserver = ezySurfaceCreateUnixServer("/surfacedesktop/regulardesktop-0");
+	programStruct->unixserver = ezySurfaceCreateUnixServer("/surfacedesktop/regulardesktop-0");
 	perror("E");
 	while(1) {
 		// Control
 		int cresult = cuEventRead(&controlUnit);
 
+		drmVSyncFlip(drm_fd,page_flip_handler); // GPU
+		/*
 		#if defined(SURFACE_GPURENDER)	
 		drmVSyncFlip(drm_fd,gpu_page_flip_handler); // GPU
 		#elif defined(SURFACE_CPURENDER)
 		drmVSyncFlip(drm_fd,cpu_page_flip_handler); // CPU
 		#endif
-
-		surfaceLookUpClients(surface,unixserver);
-		surfaceLookUpRequests(surface);
+		*/
 	}
 	
 closeprogram:

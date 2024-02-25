@@ -6,7 +6,7 @@ uniform vec2 w_e;
 uniform vec2 screen_size;
 
 vec2 w_pos = vec2(100, 100);
-vec2 w_size = vec2(300, 300);
+varying mediump vec2 w_size;
 vec2 result;
 
 varying mediump vec2 win_pos;
