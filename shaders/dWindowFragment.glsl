@@ -33,8 +33,32 @@ mediump vec4 getRoof(mediump vec2 pos)
 	return vec4(0.3, 0.3, 0.3, 1.0);
 }
 
+bool
+roundLegal(mediump float radius)
+{
+	if(win_pos.y < radius) {
+		if(win_pos.x < radius)
+			if(distance(win_pos, vec2(radius, radius)) > radius) return false;
+		if(win_pos.x > w_size.x - radius)
+			if(distance(win_pos, vec2(w_size.x - radius, radius)) > radius) return false;
+	} 
+
+	// Uncomment this part if wanna round the down.
+	/*
+	else if(win_pos.y > w_size.y - radius) {	
+		if(win_pos.x < radius)
+			if(distance(win_pos, vec2(radius, w_size.y - radius)) > radius) return false;
+		if(win_pos.x > w_size.x - radius)
+			if(distance(win_pos, vec2(w_size.x - radius, w_size.y - radius)) > radius) return false;
+	} 
+	*/
+	return true;
+}
+
 void main()
 {
+	if(!roundLegal(5.0)) discard;
+	
 	if(win_pos.y < roof_thickness) {
 		gl_FragColor = getRoof(win_pos);
 	} else {

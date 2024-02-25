@@ -149,7 +149,8 @@ int cuTouchscreenEventread(int fd, struct ControlUnit* cu)
 	}
 }
 
-int cuEventRead(struct ControlUnit* cu)
+int 
+cuEventRead(struct ControlUnit* cu)
 {
 	int ret = 0;
 keyboardeventreadloopdo:

@@ -19,6 +19,7 @@ char* loadFile(char* filepath)
 			memcpy(newresult,tresult,textsize);
 			free(tresult);
 			tresult = newresult;
+			textsize*=2;
 		}
 	}
 	tresult[counter] = '\0';

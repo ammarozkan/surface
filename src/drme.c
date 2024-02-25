@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 #include <sys/mman.h>
 
@@ -87,7 +88,6 @@ cpu_page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
 
 	// render here
 	
-	static uint32_t clearCounter = 9;
 
 	struct ProgramStruct* programStruct = data;
 	struct DrmSystem* drmSystem = programStruct->drmSystem;
@@ -96,12 +96,18 @@ cpu_page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
 	struct CPUFrameBuffer* fb_cpu = programStruct->fb;
 	struct fb_dumb* fb = fb_cpu->fb_back;
 	
-	
+
+	#ifdef defined(SURFACE_FASTER_CPU_RENDER)	
+	static uint32_t clearCounter = 9;
 	clearCounter -= 1;
 	if(clearCounter == 0) {
 		render_dumbbuffer(fb);
 		clearCounter = 9;
 	}
+	#else
+	render_dumbbuffer(fb);
+	#endif
+
 	render_surface(fb,surface);
 
 	
@@ -222,6 +228,15 @@ void SuperK(struct ProgramStruct* data)
 	surfaceMoveMainWindowLeft_quick(data->surface);
 }
 
+void
+eventReadLoop(struct ControlUnit* cu)
+{
+	int ret;
+	while(!(ret = cuEventRead(cu))) {
+		;
+	}
+}
+
 int
 main(int argc, char* argv[])
 {
@@ -311,11 +326,16 @@ main(int argc, char* argv[])
 	printf("UNIX Server.\n");
 	programStruct->unixserver = ezySurfaceCreateUnixServer("/surfacedesktop/regulardesktop-0");
 	perror("E");
-	while(1) {
-		// Control
-		int cresult = cuEventRead(&controlUnit);
 
+	pthread_t controlUnitThread;
+	pthread_create(&controlUnitThread, NULL, eventReadLoop, &controlUnit);
+       	// BOOOM, READING OPTIMIZATION!!!!
+	while(1) {
 		drmVSyncFlip(drm_fd,page_flip_handler); // GPU
+		
+		// Control
+		//int cresult = cuEventRead(&controlUnit);
+		
 		/*
 		#if defined(SURFACE_GPURENDER)	
 		drmVSyncFlip(drm_fd,gpu_page_flip_handler); // GPU
@@ -326,6 +346,8 @@ main(int argc, char* argv[])
 	}
 	
 closeprogram:
+	//pthread_join(controlUnitThread,NULL);
+	pthread_cancel(controlUnitThread);
 	destroyBuffers();
 	destroyPrograms();
 
