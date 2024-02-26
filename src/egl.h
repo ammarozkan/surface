@@ -124,7 +124,7 @@ get_drm_fb_from_gbm(int drm_fd, struct GBM* gbm)
 }
 
 static struct EGL*
-init_gl(struct GBM* gbm)
+init_egl(struct GBM* gbm)
 {
 	struct EGL* egl_result = malloc(sizeof(struct EGL));
 	EGLint major, minor, n;

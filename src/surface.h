@@ -392,9 +392,9 @@ surfaceLookUpClients(struct Surface* surface,int server_fd)
 	
 	if(req==NULL) return;
 	
-	struct Window* window = createWindow(30, 30,
-			30 + req->windowsize_x,
-			30 + req->windowsize_y);
+	struct Window* window = createWindow(150, 150,
+			150 + req->windowsize_x,
+			150 + req->windowsize_y);
 	
 	window->client = surfaceClient;
 	memcpy(window->bckr_colour, req->bckr_colour, 4);

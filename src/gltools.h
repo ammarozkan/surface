@@ -74,7 +74,7 @@ getShader(const char* src,GLenum shaderType)
 			"peace. GLERR:%i\n",glGetError());
 		return 0;
 	} else {	
-		printf("Compile succesful brah."
+		printf("Compile OK."
 			"peace. GLERR:%i\n",glGetError());
 	}
 
@@ -86,7 +86,7 @@ getShaderFromFile(char* path, GLenum shaderType)
 {
 	char* src = loadFile(path);
 	if(src == NULL) {
-		printf("loadFile returned NULL.\n");
+		printf("loadFile returned on NULL on %s.\n", path);
 		return 0;
 	}
 	GLuint result = getShader(src, shaderType);
@@ -109,7 +109,7 @@ compileShader(GLuint shaderid, const char* source)
 }
 
 GLuint
-getProgram(GLuint vertexShader, GLuint fragmentShader)
+getProgram(GLuint* shaders, unsigned int shader_count)
 {
 	GLuint programid;
 
@@ -120,14 +120,14 @@ getProgram(GLuint vertexShader, GLuint fragmentShader)
 		return 0;
 	}
 
-	glAttachShader(programid, vertexShader);
-	glAttachShader(programid, fragmentShader);
+	for(unsigned int i = 0;i<shader_count;i+=1)
+	{
+		glAttachShader(programid, shaders[i]);
+	}
 
 	glLinkProgram(programid);
 
-
 	return programid;
-
 }
 
 int
@@ -144,3 +144,39 @@ linkProgram(GLuint programid)
 	}
 	return 1;
 }
+
+int*
+initClassicalProgram(char* vertex_path, char* fragment_path)
+{
+	int* result = malloc(3*sizeof(int));
+	result[0] = getShaderFromFile(vertex_path, GL_VERTEX_SHADER);
+	if(!result[0]) {
+		printf("%s bringed error.\n",vertex_path);
+		goto errexit;
+	}
+
+	result[1] = getShaderFromFile(fragment_path, GL_FRAGMENT_SHADER);
+	if(!result[0]) {
+		printf("%s bringed error.\n",fragment_path);
+		goto errexit;
+	}
+
+	result[2] = getProgram(result, 2);
+
+	if(!result[2]) {
+		printf("Program cannot be getted.\n");
+		goto errexit;
+	}
+
+	return result;
+
+errexit:
+	free(result);
+	return NULL;
+
+}
+
+/*
+int
+initClassicalProgram(char* vertex_path, char* fragment_path)
+*/

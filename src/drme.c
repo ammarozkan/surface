@@ -272,10 +272,16 @@ main(int argc, char* argv[])
 	programStruct->gbm = init_gbm_from_connector(drm_fd,
 			drmSystem->connector);
 	printf("Init GL.\n");
-	programStruct->egl = init_gl(programStruct->gbm);
+	programStruct->egl = init_egl(programStruct->gbm);
 
-	initBuffers();
-	initPrograms();
+	if(!initBuffers()) {
+		printf("Error on initting buffers.\n");
+		return -1;
+	}
+	if(!initPrograms()) {
+		printf("Error on initting shader programs.\n");
+		return -2;
+	}
 	
 	printf("PROGRAMSCREENSIZE:%u/%u\n",
 			programStruct->gbm->hdisplay,
