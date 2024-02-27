@@ -3,7 +3,7 @@
 - libevdev
 - freetype2
 
-## And if GPU rendering support is needed:
+### And if GPU rendering support is needed:
 - libgbm
 - egl
 - gles2
