@@ -7,6 +7,8 @@
 
 #include "gltools.h"
 
+#include "glestext.h"
+
 static struct
 {
 	GLuint rectangle;
@@ -36,6 +38,20 @@ static struct
 	GLuint menubarProgram;
 
 }*surfacePrograms;
+
+FT_Library freetype2;
+FT_Face systemFace;
+
+
+int
+initFonts()
+{
+	if(!initFreetype()) 
+		return 0;
+	else if(!initSystemFace("fonts/thebrooklynsmooth-bold-demo.ttf")) 
+		return 0;
+	return 1;
+}
 
 int
 initBuffers()

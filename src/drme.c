@@ -7,7 +7,6 @@
 
 #include <sys/mman.h>
 
-
 unsigned int i = 0; // global counter. I dont want to
 		    // reallocate that thing again and 
 		    // again.
@@ -278,9 +277,15 @@ main(int argc, char* argv[])
 		printf("Error on initting buffers.\n");
 		return -1;
 	}
+
 	if(!initPrograms()) {
 		printf("Error on initting shader programs.\n");
 		return -2;
+	}
+
+	if(!initFonts()) {
+		printf("Error on initting fonts.\n");
+		return -3;
 	}
 	
 	printf("PROGRAMSCREENSIZE:%u/%u\n",
