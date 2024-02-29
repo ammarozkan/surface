@@ -33,7 +33,8 @@ char* loadFile(char* filepath)
 	return result;
 }
 
-GLuint create2dBuffer(float* buffer, unsigned int size)
+GLuint 
+create2dBuffer(float* buffer, unsigned int size)
 {
 	GLuint result;
 	glGenBuffers(1, &result);
@@ -163,7 +164,7 @@ initClassicalProgram(char* vertex_path, char* fragment_path)
 
 	result[2] = getProgram(result, 2);
 
-	if(!result[2]) {
+	if(result[2] == 0) {
 		printf("Program cannot be getted.\n");
 		goto errexit;
 	}

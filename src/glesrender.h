@@ -11,8 +11,8 @@
 
 static struct
 {
-	GLuint rectangle;
-	GLuint vCursor;
+	GLuint rectangle, rectangleVAO;
+	GLuint vCursor, vCursorVAO;
 }*surfaceBuffers;
 
 static struct
@@ -75,10 +75,14 @@ initBuffers()
 	};
 	
 	surfaceBuffers = malloc(sizeof(*surfaceBuffers));
-
+	glGenVertexArrays(1, &surfaceBuffers->rectangleVAO);
+	glBindVertexArray(surfaceBuffers->rectangleVAO);
 	surfaceBuffers->rectangle = create2dBuffer(rectangle, 
 			sizeof(rectangle));
-	//surfaceBuffers->vCursor = create2dBuffer(vCursor, sizeof(vCursor));
+
+	glGenVertexArrays(1, &surfaceBuffers->vCursorVAO);
+	glBindVertexArray(surfaceBuffers->vCursorVAO);
+	surfaceBuffers->vCursor = create2dBuffer(vCursor, sizeof(vCursor));
 
 	glClearColor(0.2, 0.2, 0.2, 1.0);
 	return 1;
@@ -130,13 +134,13 @@ initCursorProgram()
 	glBindAttribLocation(ids[2], 0, "model_pos");
 
 	surfacePrograms->CursorProgram_cursorPos = glGetUniformLocation(ids[2], "cursorPos");
-	if(surfacePrograms->CursorProgram_cursorPos == 0) {
+	if(surfacePrograms->CursorProgram_cursorPos == -1) {
 		printf("cursorPos uniform not found in cursor program.\n");
 		return 0;
 	}
 
 	surfacePrograms->CursorProgram_screen_size = glGetUniformLocation(ids[2], "screen_size");
-	if(surfacePrograms->CursorProgram_cursorPos == 0) {
+	if(surfacePrograms->CursorProgram_cursorPos == -1) {
 		printf("screen_size uniform not found in cursor program.\n");
 		return 0;
 	}
@@ -190,7 +194,7 @@ initMenubarProgram()
 		printf("menu program cannot be inited.\n");
 		return 0;
 	}
-	glBindAttribLocation(ids[2], 0, "model_pas");
+	glBindAttribLocation(ids[2], 0, "model_pos");
 	if(!linkProgram(ids[2])) goto erralloc;
 		
 	surfacePrograms->menubarVertex = ids[0];
@@ -230,6 +234,8 @@ initPrograms()
 	} else if(!initBackgroundProgram()) {
 		return 0;
 	} else if(!initMenubarProgram()) {
+		return 0;
+	} else if(!initTextRenderer()) {
 		return 0;
 	}
 
@@ -300,6 +306,7 @@ void
 drawCursorBuffer(struct QuickCursor qc)
 {
 	float posx = qc.x, posy = qc.y;
+	glBindVertexArray(surfaceBuffers->vCursorVAO);
 	glUseProgram(surfacePrograms->cursorProgram);
 	glUniform2f(surfacePrograms->CursorProgram_cursorPos, posx, posy);
 
@@ -324,6 +331,7 @@ drawWindowBuffer(float sx, float sy, float ex, float ey)
 void render_surface(struct Surface* surf)
 {
 	glClear(GL_COLOR_BUFFER_BIT);
+	glBindVertexArray(surfaceBuffers->rectangleVAO);
 	glUseProgram(surfacePrograms->backgroundProgram);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 	
@@ -335,5 +343,7 @@ void render_surface(struct Surface* surf)
 //	drawWindowBuffer(100.0f, 100.0f, 300.0f, 200.0f);
 	drawMenuBar();
 	drawCursorBuffer(surf->cursor);
+
+	renderASCIIText("Hello World", systemChars, 100.0f, 100.0f, 10.0f);
 
 }
