@@ -23,14 +23,17 @@ FT_Library freetype2;
 struct FTCharacterBuffer* // 128 characters
 loadSystemFont128ASCII(FT_Face face)
 {
-	struct FTCharacterBuffer* result = malloc(sizeof(struct FTCharacterBuffer) * 128);
+	struct FTCharacterBuffer* result = 
+		malloc(sizeof(struct FTCharacterBuffer) * 128);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	printf("Loading:");
 	for(unsigned char c = 0; c < 128; c++) {
+		
 		if(FT_Load_Char(face, c, FT_LOAD_RENDER)) {
 			printf("Glyph %u cannot be loaded from system font.\n",
 					c);
 			continue;
-		}
+		} printf("%c",c);
 
 		unsigned int texture;
 		glGenTextures(1, &texture);
@@ -64,7 +67,7 @@ loadSystemFont128ASCII(FT_Face face)
 		result[c].bearing_y = glyph->bitmap_top;
 		result[c].advance = glyph->advance.x;
 		
-	}
+	} printf("\n");
 	return result;
 }
 
@@ -119,9 +122,14 @@ initSystemFace(char* path)
 int
 initTextRenderer()
 {
+	printf("Text Renderer init call %u.\n",glGetError());
 	glGenVertexArrays(1, &TextRenderer.VAO);
+	printf("VAO:%u\n", TextRenderer.VAO);
+
 	glBindVertexArray(TextRenderer.VAO);
 	glGenBuffers(1, &TextRenderer.VBO);
+	printf("VBO:%u\n", TextRenderer.VBO);
+
 	glBindBuffer(GL_ARRAY_BUFFER, TextRenderer.VBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, 
 			NULL, GL_DYNAMIC_DRAW);
@@ -134,6 +142,8 @@ initTextRenderer()
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
+
+	printf("glError after buffer stuff is %u\n",glGetError());
 
 	int* ids = initClassicalProgram(
 			"shaders/textVertex.glsl",
@@ -155,7 +165,7 @@ initTextRenderer()
 		int glerr = glGetError();
 		printf("color uniform not found in text program:%u:%u\n",glerr,GL_INVALID_VALUE);
 		if(glerr == GL_INVALID_VALUE) printf("Program id input:%u\n",TextRenderer.program);
-		return 0;
+		//return 0;
 	}
 	
 	return 1;
@@ -164,11 +174,28 @@ erralloc:
 	return 0;
 }
 
-void
-renderASCIIText(char* text, struct FTCharacterBuffer* preloads, float x, float y, float scale)
+int
+textRendererScreenSize(unsigned int width, unsigned int height)
 {
 	glUseProgram(TextRenderer.program);
-	glUniform4f(TextRenderer.color, 1.0, 1.0, 1.0, 1.0);
+	GLint size_uniform = glGetUniformLocation(TextRenderer.program,
+			"screen_size");
+	if(size_uniform == -1) {
+		printf("screen_size not found in the program.\n");
+		return 0;
+	}
+	glUniform2f(size_uniform, (float)width, (float)height);
+	return 1;
+}
+
+void
+renderASCIIText(char* text, struct FTCharacterBuffer* preloads, 
+		float x, float y, float scale)
+{
+	glUseProgram(TextRenderer.program);
+	if(TextRenderer.color == -1) printf("color is not found.\n");
+	else glUniform4f(TextRenderer.color, 1.0, 1.0, 1.0, 1.0);
+	
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(TextRenderer.VAO);
 
@@ -189,15 +216,18 @@ renderASCIIText(char* text, struct FTCharacterBuffer* preloads, float x, float y
 			{xpos + w,	ypos,		1.0f,	1.0f},
 			{xpos + w,	ypos + h,	1.0f,	0.0f}
 		};
+		//printf("(%f,%f) to (%f,%f)\n", xpos, ypos, xpos+w, ypos+h);
 		glBindTexture(GL_TEXTURE_2D, chbuf.textureID);
 		glBindBuffer(GL_ARRAY_BUFFER, TextRenderer.VBO);
 		glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 
+		
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-		x += (chbuf.advance >> 6) * scale; // bitshift by 6 to get value in pixels
-	}
+		x += (chbuf.advance >> 6) * scale;
+		// bitshift by 6 to get value in pixels
+	} 
 	glBindVertexArray(0);
 	glBindTexture(GL_TEXTURE_2D, 0);
 }

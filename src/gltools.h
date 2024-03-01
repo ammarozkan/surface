@@ -10,7 +10,6 @@ char* loadFile(char* filepath)
 	unsigned int textsize = 1024;
 	char* tresult = malloc(textsize);
 	unsigned int counter = 0;
-	printf("ReadingStart\n");
 	while(fread(&c, 1, 1, file) == 1) {
 		tresult[counter] = c;
 		counter+=1;
@@ -29,7 +28,7 @@ char* loadFile(char* filepath)
 	free(tresult);
 	fclose(file);
 
-	printf("LOADEDFILE:\n%s\nEND\n",result);
+	//printf("LOADEDFILE:\n%s\nEND\n",result);
 	return result;
 }
 
@@ -65,18 +64,16 @@ getShader(const char* src,GLenum shaderType)
 	
 	glGetShaderInfoLog(sid, sizeof(infoLog),
 			&infoLength, infoLog);
-	printf("CompileLog:%s\n",infoLog);
 
 	GLint compileStat;
 	glGetShaderiv(sid, GL_COMPILE_STATUS, &compileStat);
 	
 	if(compileStat != GL_TRUE) {
-		printf("Compile NOT succesful brah."
-			"peace. GLERR:%i\n",glGetError());
+		printf("Compilation is not succesful. "
+			       "GLERR:%i\n", glGetError());
+		printf("Error Source:\n%s\n",src);
+		printf("CompileLog:%s\n",infoLog);
 		return 0;
-	} else {	
-		printf("Compile OK."
-			"peace. GLERR:%i\n",glGetError());
 	}
 
 	return sid;
@@ -181,3 +178,18 @@ errexit:
 int
 initClassicalProgram(char* vertex_path, char* fragment_path)
 */
+
+// standard uniform settings
+
+
+int
+setProgramScreenSize(GLuint program, 
+		unsigned int width, unsigned int height)
+{
+	glUseProgram(program);
+	GLint the_uniform = glGetUniformLocation(program, "screen_size");
+	if(the_uniform == -1) return 0;
+	printf("setting width : %f\n",(float)width);
+	glUniform2f(the_uniform, (float)width, (float)height);
+	return 1;
+}

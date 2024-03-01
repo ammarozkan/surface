@@ -291,8 +291,11 @@ main(int argc, char* argv[])
 	printf("PROGRAMSCREENSIZE:%u/%u\n",
 			programStruct->gbm->hdisplay,
 			programStruct->gbm->vdisplay);	
-	initProgramScreenSize(programStruct->gbm->hdisplay,
-			programStruct->gbm->vdisplay);
+	if(!initProgramScreenSize(programStruct->gbm->hdisplay,
+			programStruct->gbm->vdisplay)) {
+		printf("Screen Size Setting to shaders brought error.\n");
+		return -4;
+	}
 
 	render_surface(programStruct->surface);	
 	

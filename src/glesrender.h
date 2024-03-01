@@ -19,24 +19,25 @@ static struct
 {
 	GLuint windowVertex;
 	GLuint windowFragment;
-	GLuint windowProgram;
 	GLint d_w_s;
 	GLint d_w_e;
 
 	GLuint cursorVertex;
 	GLuint cursorFragment;
-	GLuint cursorProgram;
 	GLint CursorProgram_cursorPos;
 	GLint CursorProgram_screen_size;
 
 	GLuint backgroundVertex;
 	GLuint backgroundFragment;
-	GLuint backgroundProgram;
 
 	GLuint menubarVertex;
 	GLuint menubarFragment;
-	GLuint menubarProgram;
 
+
+	GLuint windowProgram;
+	GLuint cursorProgram;
+	GLuint backgroundProgram;
+	GLuint menubarProgram;
 }*surfacePrograms;
 
 FT_Library freetype2;
@@ -254,44 +255,26 @@ destroyPrograms()
 }
 
 
-void
+int
 initProgramScreenSize(uint32_t width, uint32_t height)
 {
-	GLuint wsize_uniform;
-	glUseProgram(surfacePrograms->windowProgram);
-	wsize_uniform = glGetUniformLocation(
-			surfacePrograms->windowProgram, "screen_size");
-	
-	glUniform2f(wsize_uniform, (float)width, (float)height);
-	
-	if(wsize_uniform == -1) {
-		printf("Uniform %s NOT FOUND in window!\n", "screen_size");
-	}
+	if(!setProgramScreenSize(surfacePrograms->windowProgram,
+			width, height)) printf("Cannot window ws\n");	
 
-	glUseProgram(surfacePrograms->menubarProgram);
-	wsize_uniform = glGetUniformLocation(
-			surfacePrograms->menubarProgram, "screen_size");
+	else if(!setProgramScreenSize(surfacePrograms->menubarProgram,
+			width, height)) printf("Cannot menubar ws\n");	
 
-	glUniform2f(wsize_uniform, (float)width, (float)height);
-	
-	if(wsize_uniform == -1) {
-		printf("Uniform %s NOT FOUND in menubar!\n", "screen_size");
-	}
-	
-	glUseProgram(surfacePrograms->cursorProgram);
-	wsize_uniform = glGetUniformLocation(
-			surfacePrograms->cursorProgram, "screen_size");
-	
-	glUniform2f(wsize_uniform, (float)width, (float)height);
-	
-	if(wsize_uniform == -1) {
-		printf("Uniform %s NOT FOUND in london!\n", "screen_size");
-	}
+	else if(!setProgramScreenSize(surfacePrograms->cursorProgram,
+			width, height)) printf("Cannot cursor ws\n");	
 
-	return;
-errret:
-	printf("Uniform %s NOT FOUND!\n", "screen_size");
-	return;
+	else if(!textRendererScreenSize(width, height)) {
+		printf("Text Renderer not found screen_size uniform.\n");
+	} 
+	
+	else return 1;
+
+	printf("Program screen size init not succesful!\n");
+	return 0;
 }
 
 void
@@ -344,6 +327,6 @@ void render_surface(struct Surface* surf)
 	drawMenuBar();
 	drawCursorBuffer(surf->cursor);
 
-	renderASCIIText("Hello World", systemChars, 100.0f, 100.0f, 10.0f);
+	renderASCIIText("Hello World", systemChars, 100.0f, 100.0f, 1.0f);
 
 }

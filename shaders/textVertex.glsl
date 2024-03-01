@@ -8,7 +8,8 @@ varying mediump vec2 texture_coord;
 void main()
 {
 	texture_coord = texture_coord_attrb;
-	gl_Position = vec4(2.0*(model_pos / screen_size) - vec2(1.0, 1.0), 
+	vec2 result = vec2(model_pos.x / screen_size.x, model_pos.y / screen_size.y);
+	gl_Position = vec4(2.0*result - vec2(1.0, 1.0), 
 		0.0, 1.0);
 
 } 
