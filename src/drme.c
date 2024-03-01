@@ -215,12 +215,7 @@ void TouchscreenClick(struct ProgramStruct* data,unsigned short code,unsigned in
 
 void SuperSpace(struct ProgramStruct* data)
 {
-	surfaceAddWindow_quick(data->surface);
-}
-
-void SuperK(struct ProgramStruct* data)
-{
-	surfaceMoveMainWindowLeft_quick(data->surface);
+	// Program Box
 }
 
 void
@@ -334,7 +329,6 @@ main(int argc, char* argv[])
 				drmesptr->touchscreenpath);
 	controlUnit.data = programStruct;
 	controlUnit.SuperSpace = SuperSpace;
-	controlUnit.SuperK = SuperK;
 	controlUnit.TouchscreenPositionX = TouchscreenPositionX;
 	controlUnit.TouchscreenPositionY = TouchscreenPositionY;
 	controlUnit.TouchscreenClick = TouchscreenClick;

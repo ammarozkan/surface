@@ -11,11 +11,10 @@ struct ezySurfaceClient {
 typedef struct ezySurfaceClient* EzySurfaceClient;
 
 struct ProgramFirstRequest {
-#define SURFACE_WINDOW_STANDARD 1 // for using standard surface op etc.
-#define SURFACE_WINDOW_FREE 2 // for using opengl etc.
+#define EZYSURFACE_WINDOW_STANDARD 1 // for using standard surface op etc.
+#define EZYSURFACE_WINDOW_FREE 2 // for using opengl etc.
 	uint8_t windowtype;
 	uint32_t windowsize_x, windowsize_y;
-	uint8_t bckr_colour[4]; // just test purposes.
 };
 
 
@@ -65,14 +64,12 @@ directexit:
 int 
 ezySurfaceFirstRequest(EzySurfaceClient client,
 		uint8_t window_type,
-		uint32_t width, uint32_t height, 
-		uint8_t bckr_colour[4])
+		uint32_t width, uint32_t height)
 {
 	struct ProgramFirstRequest request;
        	request.windowtype = window_type;
 	request.windowsize_x = width;
 	request.windowsize_y = height;
-	memcpy(request.bckr_colour,bckr_colour,4);
 	return write(client->socketfd,&request,sizeof(request));
 }
 

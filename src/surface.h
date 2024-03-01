@@ -70,19 +70,39 @@ struct WindowElement {
 
 struct Window {
 	struct Window* prev;
+	
 	SurfaceIdType id;
+
+#define SURFACE_WINDOW_STRICT 1	// using services from server to build the program
+#define SURFACE_WINDOW_IMAGER 2	// Requesting simple gl functions from server
+#define SURFACE_WINDOW_FREE 4	// Getting a context (OpenGL, Vulkan)
+	uint8_t WindowType;
 	uint32_t sx, sy, ex, ey;
-	uint32_t elementCount;
-
-	uint8_t bckr_colour[4];
-
-	struct WindowElement* elements;
-	struct Window* next;
 
 	struct MenuBar* menubar;
 
 	struct ezySurfaceClient* client;
+	
+	struct Window* next;
+	// ... 
+	// type specific things.
 };
+
+struct StrictWindow {
+	struct Window generics; // For memory placement.
+
+	uint32_t elementCount;
+	struct WindowElement* elements; 
+
+	uint8_t bckr_colour[4];
+};
+
+/* // Future Thing.
+struct FreeWindow {
+	struct Window generics; // MemPlacement
+	// EGL context. make it sharable, send it.
+};
+*/
 
 struct DesktopContextMenu {
 #define SURFACE_CONTEXT_ACTIVE (1 << 1)
@@ -116,6 +136,8 @@ struct Surface {
 	struct DesktopContextMenu dcm;
 
 	struct Grab grab;
+
+	// we could have a reqest list here. 'queue' like thing.
 };
 
 SurfaceIdType
@@ -149,11 +171,8 @@ createWindow(uint32_t sx, uint32_t sy,
 	result->sy = sy;
 	result->ex = ex;
 	result->ey = ey;
-	result->elementCount = 0;
-	result->elements = NULL;
 	result->next = NULL;
 	result->client = NULL;
-	memcpy(result->bckr_colour, white, 4);
 
 	return result;
 }
@@ -196,13 +215,6 @@ surfaceAddWindow_quick(struct Surface* surface)
 			400+lastPos, 300+lastPos);
 	
 	surface->focus = surface->lastWindow;
-}
-
-void 
-surfaceMoveMainWindowLeft_quick(struct Surface* surface)
-{
-	surface->focus->sx += 10;
-	surface->focus->ex += 10;
 }
 
 void
@@ -255,10 +267,8 @@ int
 constantWindowCloseButtonControl(uint32_t x, uint32_t y, struct Window* window)
 {
 	uint32_t start = 10, space = 5, height = 10, radius = 6;
-	printf("Controlling (%u,%u) - (%u,%u)\n", x, y, 
-			start + radius, height);
 	x = x - window->sx;
-	y = window->sy - y; printf("starty:%u\n",window->sy);
+	y = window->sy - y;
 
 	return isInsideCircle(x, y, start + radius, height, radius);
 }
@@ -439,7 +449,6 @@ surfaceLookUpClients(struct Surface* surface,int server_fd)
 			150 + req->windowsize_y);
 	
 	window->client = surfaceClient;
-	memcpy(window->bckr_colour, req->bckr_colour, 4);
 	
 	surfaceAddSpecificWindow(surface, window);
 }

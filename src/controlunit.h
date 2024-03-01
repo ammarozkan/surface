@@ -45,7 +45,6 @@ struct ControlUnit {
 	uint8_t specialKeys;
 	void* data;
 	void (*SuperSpace)(void* data);
-	void (*SuperK)(void* data);
 	void (*TouchscreenPositionX)(unsigned int value, void* data);
 	void (*TouchscreenPositionY)(unsigned int value, void* data);
 	void (*TouchscreenClick)(void* data, unsigned short code, 
@@ -91,9 +90,6 @@ handleKey(unsigned short code, unsigned int value,
 		{
 		case KEY_SPACE:
 			cu->SuperSpace(cu->data);
-			break;
-		case KEY_K:
-			cu->SuperK(cu->data);
 			break;
 		}
 	}
