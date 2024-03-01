@@ -14,9 +14,10 @@ static struct {
 	GLint color;
 	
 	GLint VAO, VBO;
+	GLint exampleVAO, exampleVBO;
 }TextRenderer;
 
-// Maybe struct TextRenderer here?
+unsigned int global_width, global_height;
 
 FT_Library freetype2;
 
@@ -131,17 +132,30 @@ initTextRenderer()
 	printf("VBO:%u\n", TextRenderer.VBO);
 
 	glBindBuffer(GL_ARRAY_BUFFER, TextRenderer.VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, 
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 4 * 4, 
 			NULL, GL_DYNAMIC_DRAW);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 2, GL_FLOAT, 
 			GL_FALSE, 4*sizeof(float), 0);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 2, GL_FLOAT, 
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 2, GL_FLOAT, 
 			GL_FALSE, 4*sizeof(float), 2*sizeof(float));
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
+
+	float exampleVert[] = {
+		360.0f, 360.0f,		0.0f, 0.0f,
+		400.0f, 360.0f,		1.0f, 0.0f,
+		400.0f, 400.0f,		1.0f, 1.0f,
+		360.0f, 400.0f,		0.0f, 1.0f
+	};
+
+	glGenVertexArrays(1, &TextRenderer.exampleVAO);
+	glBindVertexArray(TextRenderer.exampleVAO);
+	TextRenderer.exampleVBO = create2dBuffer(exampleVert,
+			sizeof(exampleVert));
+
 
 	printf("glError after buffer stuff is %u\n",glGetError());
 
@@ -182,7 +196,7 @@ textRendererScreenSize(unsigned int width, unsigned int height)
 			"screen_size");
 	if(size_uniform == -1) {
 		printf("screen_size not found in the program.\n");
-		return 0;
+		//return 0;
 	}
 	glUniform2f(size_uniform, (float)width, (float)height);
 	return 1;
@@ -193,8 +207,7 @@ renderASCIIText(char* text, struct FTCharacterBuffer* preloads,
 		float x, float y, float scale)
 {
 	glUseProgram(TextRenderer.program);
-	if(TextRenderer.color == -1) printf("color is not found.\n");
-	else glUniform4f(TextRenderer.color, 1.0, 1.0, 1.0, 1.0);
+	glUniform4f(TextRenderer.color, 0.0, 0.0, 0.0, 1.0);
 	
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(TextRenderer.VAO);
@@ -202,13 +215,13 @@ renderASCIIText(char* text, struct FTCharacterBuffer* preloads,
 	for(unsigned int i = 0; text[i] != '\0' ; i += 1) {
 		char c = text[i];
 		struct FTCharacterBuffer chbuf = preloads[c];
-
+		
 		float xpos = x + chbuf.bearing_x * scale;
 		float ypos = y - (chbuf.rows - chbuf.bearing_y) * scale;
 
 		float w = chbuf.width * scale;
 		float h = chbuf.rows * scale;
-
+		
 		// Vertex Buffer for each character
 		float vertices[4][4]  = {
 			{xpos, 		ypos,		0.0f, 	1.0f},
@@ -221,8 +234,8 @@ renderASCIIText(char* text, struct FTCharacterBuffer* preloads,
 		glBindBuffer(GL_ARRAY_BUFFER, TextRenderer.VBO);
 		glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-		
+	
+		//glBindVertexArray(TextRenderer.exampleVAO);	
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
 		x += (chbuf.advance >> 6) * scale;
@@ -230,4 +243,29 @@ renderASCIIText(char* text, struct FTCharacterBuffer* preloads,
 	} 
 	glBindVertexArray(0);
 	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+unsigned int
+getDrawnTextHeight(char* text, struct FTCharacterBuffer* preloads, 
+		float scale)
+{
+	unsigned int result = 0;
+	for(unsigned int i = 0;text[i]!='\0';i+=1) {	
+		struct FTCharacterBuffer chbuf = preloads[text[i]];
+		unsigned int height = chbuf.rows;
+		if(height > result) result = height;
+	}
+	return result * scale;
+}
+
+unsigned int
+getDrawnTextLength(char* text, struct FTCharacterBuffer* preloads,
+		float scale)
+{
+	unsigned int result = 0;
+	for(unsigned int i = 0;text[i]!='\0';i+=1) {	
+		struct FTCharacterBuffer chbuf = preloads[text[i]];
+		result += chbuf.width;
+	}
+	return result * scale;
 }

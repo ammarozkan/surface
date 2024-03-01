@@ -40,9 +40,7 @@ static struct
 	GLuint menubarProgram;
 }*surfacePrograms;
 
-FT_Library freetype2;
-FT_Face systemFace;
-
+unsigned int global_width, global_height;
 
 int
 initFonts()
@@ -271,18 +269,36 @@ initProgramScreenSize(uint32_t width, uint32_t height)
 		printf("Text Renderer not found screen_size uniform.\n");
 	} 
 	
-	else return 1;
+	else {
+		global_width = width;
+		global_height = height;
+		return 1;
+	}
 
 	printf("Program screen size init not succesful!\n");
 	return 0;
 }
 
 void
-drawMenuBar()
+drawMenuBar(struct MenuBar* menubar)
 {
+	unsigned int menubarsize = 15;
 	glUseProgram(surfacePrograms->menubarProgram);	
 	
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+	if(menubar == NULL) return;
+
+	unsigned int pos = 20;
+	for(unsigned int i = 0 ; i < menubar->segmentCount ; i+=1) {
+		struct ContextMenu* cm = &menubar->segments[i];
+		unsigned int height = getDrawnTextHeight(cm->preview, 
+			systemChars, 0.25f);
+		renderASCIIText(cm->preview, systemChars, pos, 
+			global_height - height - (menubarsize - height) / 2, 
+			0.25f);
+		pos += getDrawnTextLength(cm->preview, systemChars, 0.25f);
+	}	
 }
 
 void
@@ -324,9 +340,8 @@ void render_surface(struct Surface* surf)
 				win->ex, win->ey);
 	}
 //	drawWindowBuffer(100.0f, 100.0f, 300.0f, 200.0f);
-	drawMenuBar();
+	drawMenuBar(surf->menubar);
 	drawCursorBuffer(surf->cursor);
 
-	renderASCIIText("Hello World", systemChars, 100.0f, 100.0f, 1.0f);
 
 }

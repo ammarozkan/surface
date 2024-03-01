@@ -8,5 +8,5 @@ void main()
 
 	highp vec4 sampled = vec4(1.0, 1.0, 1.0, 
 		texture2D(text, texture_coord).r);
-	gl_FragColor = textColor;
+	gl_FragColor = textColor * sampled;
 }

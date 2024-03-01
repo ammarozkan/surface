@@ -2,6 +2,7 @@
 #define SURFACE_H
 
 #include <string.h>
+#include "mathematics.h"
 
 // Window Style Constants
 #define WINDOW_ROOF_THICKNESS 16
@@ -33,8 +34,31 @@ typedef uint8_t SurfaceIdType; 	// I wanna make it modifiable cuz
 			    	// here uint64_t for a multi mega
 			    	// super server computer!
 
+struct MenuBar;
+
+struct ContextMenu {
+	char* preview;
+	uint8_t segmentCount;
+	struct ContextMenu* segments;
+
+	int (*function)(void*);
+};
+
+struct FunctionalContextMenu {
+	char* preview;
+	uint8_t segmentCount;
+	
+	void* data;
+	int (*function)(void* data);
+};
+
 struct QuickCursor {
 	uint32_t x, y;
+};
+
+struct Cursor {
+	uint32_t x, y;
+	void* currentContextMenu;
 };
 
 struct WindowElement {
@@ -55,6 +79,8 @@ struct Window {
 	struct WindowElement* elements;
 	struct Window* next;
 
+	struct MenuBar* menubar;
+
 	struct ezySurfaceClient* client;
 };
 
@@ -72,6 +98,11 @@ struct Grab {
 	uint32_t x, y;
 };
 
+struct MenuBar {
+	uint8_t segmentCount;
+	struct ContextMenu* segments;
+};
+
 struct Surface {
 	struct QuickCursor cursor;
 	struct Window* focus;	
@@ -79,6 +110,8 @@ struct Surface {
 	
 	struct Window* wins;
 	struct Window* lastWindow;
+
+	struct MenuBar* menubar;
 
 	struct DesktopContextMenu dcm;
 
@@ -121,6 +154,7 @@ createWindow(uint32_t sx, uint32_t sy,
 	result->next = NULL;
 	result->client = NULL;
 	memcpy(result->bckr_colour, white, 4);
+
 	return result;
 }
 
@@ -202,6 +236,9 @@ void
 surfaceCloseWindow(struct Surface* surface, struct Window* window)
 {
 	// surfaceDestroyWindowElements()
+	if(window == surface->lastWindow) 
+		surface->menubar = NULL;
+
 	if(window->prev != NULL) window->prev->next = window->next;
 	else surface->wins = window->next;
 
@@ -217,11 +254,13 @@ surfaceCloseWindow(struct Surface* surface, struct Window* window)
 int
 constantWindowCloseButtonControl(uint32_t x, uint32_t y, struct Window* window)
 {
-	int ycontrol = window->sy - WINDOW_UNTIL_BUTTON_THICKNESS - WINDOW_ROOF_BUTTON_THICKNESS < y && y < window->sy - WINDOW_UNTIL_BUTTON_THICKNESS;
+	uint32_t start = 10, space = 5, height = 10, radius = 6;
+	printf("Controlling (%u,%u) - (%u,%u)\n", x, y, 
+			start + radius, height);
+	x = x - window->sx;
+	y = window->sy - y; printf("starty:%u\n",window->sy);
 
-	int xcontrol = window->sx + WINDOW_SPACE_FROM_START < x && x < window->sx + WINDOW_GENERIC_ROOF_BUTTON_WIDTH;
-
-	return xcontrol && ycontrol;
+	return isInsideCircle(x, y, start + radius, height, radius);
 }
 
 void
@@ -257,6 +296,8 @@ clickWindow(struct Surface* surface, struct Window* window,
 		surface->grab.x = surface->cursor.x;
 		surface->grab.y = surface->cursor.y;
 	}
+
+	surface->menubar = window->menubar;
 }
 
 void
@@ -297,6 +338,7 @@ clickSurface(struct Surface* surface, unsigned short code,
 		surface->dcm.info |= SURFACE_CONTEXT_ACTIVE;
 	} else surface->dcm.info &= ~SURFACE_CONTEXT_ACTIVE;
 	printf("Desktop Click Everybody!\n");
+	surface->menubar = NULL;
 	return;
 }
 

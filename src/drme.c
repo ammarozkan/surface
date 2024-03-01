@@ -172,10 +172,6 @@ page_flip_handler(int drm_fd, unsigned sequence, unsigned tv_sec,
 #elif defined(SURFACE_CPURENDER)
 	cpu_page_flip_handler(drm_fd, sequence, tv_sec, tv_usec, data);
 #endif
-	struct ProgramStruct* programStruct = data;
-	
-	surfaceLookUpClients(programStruct->surface,programStruct->unixserver);
-	surfaceLookUpRequests(programStruct->surface);
 }
 
 uint32_t getChangedRange(uint32_t value, uint32_t old, uint32_t new)
@@ -232,7 +228,12 @@ eventReadLoop(struct ControlUnit* cu)
 {
 	int ret;
 	while(!(ret = cuEventRead(cu))) {
-		;
+		struct ProgramStruct* programStruct = cu->data;
+	
+		surfaceLookUpClients(programStruct->surface,
+				programStruct->unixserver);
+
+		surfaceLookUpRequests(programStruct->surface);
 	}
 }
 
@@ -329,7 +330,8 @@ main(int argc, char* argv[])
 
 	printf("Control Unit\n");
 	struct ControlUnit controlUnit = 
-		cuCreateControlUnit(drmesptr->keyboardpath,drmesptr->touchscreenpath);
+		cuCreateControlUnit(drmesptr->keyboardpath,
+				drmesptr->touchscreenpath);
 	controlUnit.data = programStruct;
 	controlUnit.SuperSpace = SuperSpace;
 	controlUnit.SuperK = SuperK;
