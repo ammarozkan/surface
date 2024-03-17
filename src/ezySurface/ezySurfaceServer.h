@@ -49,8 +49,13 @@ ezySurfaceCreateUnixServer(const char* place)
 struct ezySurfaceClient*
 ezySurfaceLookUpClients(int server_socket)
 {
-	int client_socket; int clen = sizeof(struct sockaddr_un); struct sockaddr_un client_addr;
-	if((client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &clen)) == -1) {
+	int client_socket; 
+	struct sockaddr_un client_addr;
+	int clen = sizeof(struct sockaddr_un); 
+	
+	if((client_socket = 
+		accept(server_socket, (struct sockaddr*)&client_addr, &clen)) 
+			== -1) {
 		if(errno == EAGAIN) {
 			return NULL;
 		} else {
@@ -61,7 +66,8 @@ ezySurfaceLookUpClients(int server_socket)
 	int flags = fcntl(client_socket, F_GETFL,0);
 	fcntl(client_socket, F_SETFL, flags|O_NONBLOCK);
 	
-	struct ezySurfaceClient* result = malloc(sizeof(struct ezySurfaceClient));
+	struct ezySurfaceClient* result = 
+		malloc(sizeof(struct ezySurfaceClient));
 	result->socketfd = client_socket;
 	return result;
 }
@@ -78,7 +84,8 @@ ezySurfaceFirstRequestReceive(struct ezySurfaceClient* client)
 	}
 }
 
-uint32_t ezySurfaceLookupRequest(struct ezySurfaceClient* client)
+uint32_t 
+ezySurfaceLookupRequest(struct ezySurfaceClient* client)
 {
 	uint32_t result;
 	int ret = read(client->socketfd, &result, sizeof(result));

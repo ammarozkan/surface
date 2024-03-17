@@ -223,7 +223,7 @@ render_windowbase(struct fb_dumb* fb, struct Window* win)
 
 	//render_box(fb, win->sx - 5, win->sy - COL_TH*2 - BUTTON_TH + 1, win->sx, win->ey,blackcolour);
 	//render_box(fb, win->ex, win->sy - COL_TH*2 - BUTTON_TH + 1, win->ex + 4, win->ey,blackcolour);
-	render_box(fb, win->sx, win->sy, win->ex, win->ey,win->bckr_colour);
+	render_box(fb, win->sx, win->sy, win->ex, win->ey, bordercolour);
 
 }
 

@@ -327,7 +327,7 @@ clickSurface(struct Surface* surface, unsigned short code,
 		return;
 	}
 
-	printf("Surface Click!\n");
+	printf("Surface Click 0x%x!\n", code);
 
 	uint32_t x = surface->cursor.x, y = surface->cursor.y;
 	
@@ -354,41 +354,65 @@ clickSurface(struct Surface* surface, unsigned short code,
 
 // These basic functions will be useful in drag & drop operations.
 // inlines could be removed in final version. for now, inline is good.
-static inline void 
-surfaceMoveCursorX(struct Surface* surface, uint32_t x)
+static inline void
+surfaceMoveDragX(struct Surface* surface, int move)
 {
-	surface->cursor.x = x;
 	if(surface->grab.type == SURFACE_GRAB_WINDOW)
 	{
-		int move = surface->cursor.x - surface->grab.x;
 		struct Window* grabbed = surface->grab.ptr;
 		grabbed->sx += move;
 		grabbed->ex += move;
 	}
-	surface->grab.x = x;
 }
 
-static inline void 
-surfaceMoveCursorY(struct Surface* surface, uint32_t y)
+static inline void
+surfaceMoveDragY(struct Surface* surface, int move)
 {
-	surface->cursor.y = y;
 	if(surface->grab.type == SURFACE_GRAB_WINDOW)
 	{
-		int move = surface->cursor.y - surface->grab.y;
 		struct Window* grabbed = surface->grab.ptr;
 		grabbed->sy += move;
 		grabbed->ey += move;
 	}
+}
+
+static inline void 
+surfaceSetCursorX(struct Surface* surface, uint32_t x)
+{
+	surface->cursor.x = x;
+	surfaceMoveDragX(surface, surface->cursor.x - surface->grab.x);
+	surface->grab.x = x;
+}
+
+static inline void 
+surfaceSetCursorY(struct Surface* surface, uint32_t y)
+{
+	surface->cursor.y = y;
+	surfaceMoveDragY(surface, surface->cursor.y - surface->grab.y);
 	surface->grab.y = y;
 }
 
 static inline void
-surfaceMoveCursor(struct Surface* surface, uint32_t x, uint32_t y)
+surfaceSetCursor(struct Surface* surface, uint32_t x, uint32_t y)
 {
 	surface->cursor.x = x;
 	surface->cursor.y = y;
 }
 
+static inline void
+surfaceMoveCursorX(struct Surface* surface, int32_t value)
+{
+	surface->cursor.x += value;
+	surfaceMoveDragX(surface, value);
+	//printf("Cursor:%u,%u\n", surface->cursor.x, surface->cursor.y);
+}
+
+static inline void
+surfaceMoveCursorY(struct Surface* surface, int32_t value)
+{
+	surface->cursor.y += value;
+	surfaceMoveDragY(surface, value);
+}
 
 /*
  *

@@ -1,6 +1,5 @@
-- [x] Text Rendering
-    - [x] MenuBar system. (Should have modifiable functions and texts (and maybe a shortcut preview) for each options.)
-- [ ] Rectangle collider to buttons for performance.
+- [-] Text Rendering
+    - [-] MenuBar system. (Should have modifiable functions and texts (and maybe a shortcut preview) for each options.)
 - [ ] Beutiful UI interface for devs.
     - [ ] An XCode 15 like app for example.
 - [ ] Shared FrameBuffers

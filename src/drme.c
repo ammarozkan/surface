@@ -40,9 +40,9 @@ struct drme_specs
 {
 	char* gpupath;
 	char* keyboardpath;
-	char* touchscreenpath; 	// my virtual machine works with my mouse like 
-			    	// this but its not accurate in a
-			    	// real machine i guess.
+	char* touchscreenpath;
+	char* touchpadpath;
+	char* mousepath;
 }; 
 
 struct ProgramStruct {
@@ -61,6 +61,10 @@ argWork(int argc, char* argv[])
 {
 	struct drme_specs* drmesptr = malloc(sizeof(struct drme_specs));
 	drmesptr->gpupath = "/dev/dri/card0";
+	drmesptr->keyboardpath = NULL;
+	drmesptr->touchscreenpath = NULL;
+	drmesptr->touchpadpath = NULL;
+	drmesptr->mousepath = NULL;
 	for(i = 0;i<argc;i++) {
 		if(strcmp(argv[i],"--setgpu") == 0) {
 			i+=1; drmesptr->gpupath = argv[i];
@@ -71,6 +75,12 @@ argWork(int argc, char* argv[])
 		}else if(strcmp(argv[i],"--settouchscreen") == 0) {
 			i+=1; drmesptr->touchscreenpath = argv[i];
 			printf("Setting Touchscreen Path to '%s'.\n",argv[i]);
+		}else if(strcmp(argv[i],"--settouchpad") == 0) {
+			i+=1; drmesptr->touchpadpath = argv[i];
+			printf("Setting Touchpad Path to '%s'. \n",argv[i]);
+		}else if(strcmp(argv[i],"--setmouse") == 0) {
+			i+=1; drmesptr->mousepath = argv[i];
+			printf("Setting Mouse Path to '%s'. \n", argv[i]);
 		}
 	}
 	return drmesptr;
@@ -184,31 +194,63 @@ void TouchscreenPositionX(unsigned int value,struct ProgramStruct* data)
 {
 	uint32_t width = ((struct CPUFrameBuffer*)data->fb)->fb_front->width;
 	uint32_t newx = getChangedRange(value, 32000, width);
-	surfaceMoveCursorX(data->surface, newx);
+	surfaceSetCursorX(data->surface, newx);
 }
 
 void TouchscreenPositionY(unsigned int value, struct ProgramStruct* data)
 {
 	uint32_t height = ((struct CPUFrameBuffer*)data->fb)->fb_front->height;
 	uint32_t newy = getChangedRange(value, 32000, height);
-	surfaceMoveCursorY(data->surface, newy);
+	surfaceSetCursorY(data->surface, newy);
 }
 #elif defined(SURFACE_GPURENDER)
 void TouchscreenPositionX(unsigned int value,struct ProgramStruct* data)
 {
 	uint32_t width = data->gbm->hdisplay;
 	uint32_t newx = getChangedRange(value, 32000, width);
-	surfaceMoveCursorX(data->surface, newx);
+	surfaceSetCursorX(data->surface, newx);
 }
 
 void TouchscreenPositionY(unsigned int value, struct ProgramStruct* data)
 {
 	uint32_t height = data->gbm->vdisplay;
 	uint32_t newy = getChangedRange(value, 32000, height);
-	surfaceMoveCursorY(data->surface, newy);
+	surfaceSetCursorY(data->surface, newy);
+}
+void TouchpadPositionX(unsigned int value, struct ProgramStruct* data)
+{
+	uint32_t width = data->gbm->hdisplay;
+	uint32_t newx = getChangedRange(value-80,2900,width);
+	surfaceSetCursorX(data->surface, newx);
+}
+void TouchpadPositionY(unsigned int value, struct ProgramStruct* data)
+{
+	uint32_t height = data->gbm->vdisplay;
+	uint32_t newy = getChangedRange(value-80,1400,height);
+	surfaceSetCursorY(data->surface, newy);
 }
 #endif
-void TouchscreenClick(struct ProgramStruct* data,unsigned short code,unsigned int value)
+void 
+TouchscreenClick(struct ProgramStruct* data, unsigned short code,
+		unsigned int value)
+{
+	clickSurface(data->surface,code,value);
+}
+
+void
+MouseMoveX(int value, struct ProgramStruct* data)
+{
+	surfaceMoveCursorX(data->surface, value);
+}
+
+void
+MouseMoveY(int value, struct ProgramStruct* data)
+{
+	surfaceMoveCursorY(data->surface, value);
+}
+
+void
+MouseKey(struct ProgramStruct* data, unsigned short code, unsigned int value)
 {
 	clickSurface(data->surface,code,value);
 }
@@ -326,12 +368,19 @@ main(int argc, char* argv[])
 	printf("Control Unit\n");
 	struct ControlUnit controlUnit = 
 		cuCreateControlUnit(drmesptr->keyboardpath,
-				drmesptr->touchscreenpath);
+				drmesptr->touchscreenpath,
+				drmesptr->touchpadpath,
+				drmesptr->mousepath);
 	controlUnit.data = programStruct;
 	controlUnit.SuperSpace = SuperSpace;
 	controlUnit.TouchscreenPositionX = TouchscreenPositionX;
 	controlUnit.TouchscreenPositionY = TouchscreenPositionY;
 	controlUnit.TouchscreenClick = TouchscreenClick;
+	controlUnit.TouchpadPositionX = TouchpadPositionX;
+	controlUnit.TouchpadPositionY = TouchpadPositionY;
+	controlUnit.MouseMoveX = MouseMoveX;
+	controlUnit.MouseMoveY = MouseMoveY;
+	controlUnit.MouseKey = MouseKey;
 
 	printf("UNIX Server.\n");
 	programStruct->unixserver = ezySurfaceCreateUnixServer("/surfacedesktop/regulardesktop-0");
