@@ -3,6 +3,7 @@
 
 #include <string.h>
 #include "mathematics.h"
+#include "usurf/usurfTypes.h"
 
 // Window Style Constants
 #define WINDOW_ROOF_THICKNESS 16
@@ -62,10 +63,9 @@ struct Cursor {
 };
 
 struct WindowElement {
-	uint32_t x,y,wx,wy;
-	void (*render)(struct fb_dumb*);
-	bool (*onClick)();
-	struct WindowElement* next;
+	uint32_t x,y,w,h;
+	uint32_t id;
+	void* data;
 };
 
 struct Window {
@@ -73,7 +73,7 @@ struct Window {
 	
 	SurfaceIdType id;
 
-#define SURFACE_WINDOW_STRICT 1	// using services from server to build the program
+#define SURFACE_WINDOW_STRICT 1	// using services to build the program
 #define SURFACE_WINDOW_IMAGER 2	// Requesting simple gl functions from server
 #define SURFACE_WINDOW_FREE 4	// Getting a context (OpenGL, Vulkan)
 	uint8_t WindowType;
@@ -81,7 +81,7 @@ struct Window {
 
 	struct MenuBar* menubar;
 
-	struct ezySurfaceClient* client;
+	int clientsocket;
 	
 	struct Window* next;
 	// ... 
@@ -91,9 +91,11 @@ struct Window {
 struct StrictWindow {
 	struct Window generics; // For memory placement.
 
-	uint32_t elementCount;
-	struct WindowElement* elements; 
+	uint32_t buttonCount;
+	struct WindowElement** buttons;
 
+	uint32_t textCount;
+	struct WindowElement** texts;
 	uint8_t bckr_colour[4];
 };
 
@@ -172,7 +174,27 @@ createWindow(uint32_t sx, uint32_t sy,
 	result->ex = ex;
 	result->ey = ey;
 	result->next = NULL;
-	result->client = NULL;
+	result->clientsocket = NULL;
+
+	return result;
+}
+
+struct StrictWindow*
+createStrictWindow(uint32_t sx, uint32_t sy, 
+	     uint32_t ex, uint32_t ey)
+{
+	uint8_t white[4] = {0xff,0xff,0xff,0xff};
+	
+	printf("STRICTWINDOWCREATION!\n");
+	struct Window* result = malloc(sizeof(struct StrictWindow));
+	result->prev = NULL;
+	result->id = surfaceGetId();
+	result->sx = sx;
+	result->sy = sy;
+	result->ex = ex;
+	result->ey = ey;
+	result->next = NULL;
+	result->clientsocket = NULL;
 
 	return result;
 }
@@ -202,6 +224,73 @@ surfaceAddWindow(struct Surface* surface,
 	surfaceAddSpecificWindow(surface, createWindow(sx,sy,ex,ey));
 }
 
+void surfaceWindowEntry(struct Surface* surface, 
+		struct usurfClientEntry* entry)
+{
+	surfaceAddWindow(surface, 50, 50, 50+entry->width, 50+entry->height);
+}
+
+void surfaceAddButton(struct StrictWindow* window, uint32_t id,
+		uint8_t panel,
+		uint32_t x, uint32_t y,
+		uint32_t w, uint32_t h, char* text)
+{
+	struct WindowElement** newbuttons = 
+		malloc(sizeof(void*)*(window->buttonCount + 1));
+	memcpy(newbuttons, window->buttons, sizeof(void*)*window->buttonCount);
+
+	struct WindowElement* button = malloc(sizeof(struct WindowElement));
+	button->x = x;
+	button->y = y;
+	button->w = w;
+	button->h = h;
+
+	button->data = malloc(strlen(text)+1);
+	memcpy(button->data, text, strlen(text)+1);
+
+	button->id = id;
+	free(window->buttons);
+	window->buttons = newbuttons;
+}
+
+void surfaceAddText(struct StrictWindow* window,
+		uint8_t panel,
+		uint32_t x, uint32_t y,
+		uint32_t w, uint32_t h, char* text)
+{
+	struct WindowElement** newtexts = 
+		malloc(sizeof(void*)*(window->buttonCount + 1));
+	memcpy(newtexts, window->texts, sizeof(void*)*window->textCount);
+
+	struct WindowElement* elm = malloc(sizeof(struct WindowElement));
+	elm->x = x;
+	elm->y = y;
+	elm->w = w;
+	elm->h = h;
+
+	elm->data = malloc(strlen(text)+1);
+	memcpy(elm->data, text, strlen(text)+1);
+
+	elm->id = 0;
+	free(window->texts);
+	window->texts = newtexts;
+}
+
+void
+surfaceFreeWindowElement(struct WindowElement* we)
+{
+	free(we->data);
+	free(we);
+}
+
+void
+surfaceFreeWindowElements(struct WindowElement** we, uint32_t count)
+{
+	for(uint32_t i = 0 ; i < count ; i += 1) {
+		surfaceFreeWindowElement(we[i]);
+	}
+	free(we);
+}
 
 void 
 surfaceAddWindow_quick(struct Surface* surface)
@@ -423,30 +512,15 @@ surfaceMoveCursorY(struct Surface* surface, int32_t value)
 void
 surfaceWorkOnRequest(struct Surface* surface, struct Window* win)
 {
-	struct ProgramRequestBase* base 
-		= ezySurfaceReceiveRequestBase(win->client);
-	if (base==NULL) return;
-	
-	switch (base->requestType)
-	{
-	case PROGRAM_REQUEST_KILL:
-		printf("Kill Request\n");
-		struct ProgramRequest_kill* kill_req
-			= ezySurfaceReceiveKillRequest(win->client);
-		if(kill_req!=NULL) {
-			printf("Window Kill\n");
-			surfaceCloseWindow(surface,win);
-			free(kill_req);
-		}
-		break;
-	default:
-		printf("An request can't understanded.\n");
-	}
-	free(base);
+	struct usurfServerInterface interface;
+	interface.window = win;
+	interface.addText = surfaceAddText;
+	interface.addButton = surfaceAddButton;
+	usurfServerRecvMsg(win->clientsocket, &interface);
 }
 
 void
-surfaceLookUpRequests(struct Surface* surface) 
+surfaceLookupRequests(struct Surface* surface) 
 {
 
 	SURF_ITERATE(struct Window, surface->wins, win)
@@ -456,25 +530,35 @@ surfaceLookUpRequests(struct Surface* surface)
 }
 
 void
-surfaceLookUpClients(struct Surface* surface,int server_fd)
+surfaceLookupClients(struct Surface* surface,int server_fd)
 {
-	struct ezySurfaceClient* surfaceClient = 
-		ezySurfaceLookUpClients(server_fd);
+	int clientsocket = usurfServerLookupClients(server_fd);
+
+	if(clientsocket == -1 || clientsocket == -2) return;
 	
-	if(surfaceClient == NULL) return;
+	struct usurfClientEntry* req = 
+		usurfServerGetEntry(clientsocket);
+	printf("windowEntry:0x%x\n",req);
 	
-	struct ProgramFirstRequest* req = 
-		ezySurfaceFirstRequestReceive(surfaceClient);
+	if(req==NULL) {
+		printf("window entry was empty\n");
+		return;
+	} else if(req->type != USURF_SURFACEAPI) {
+		printf("no surface api? apicode:0%x\n",req->type);
+		return;
+	} else {
+		printf("window entry!\n");
+	}
 	
-	if(req==NULL) return;
+	struct Window* window = createStrictWindow(150, 150,
+			150 + req->width,
+			150 + req->height);
 	
-	struct Window* window = createWindow(150, 150,
-			150 + req->windowsize_x,
-			150 + req->windowsize_y);
-	
-	window->client = surfaceClient;
+	window->clientsocket = clientsocket;
 	
 	surfaceAddSpecificWindow(surface, window);
+	printf("Adding new window.\n");
+
 }
 
 #endif

@@ -15,9 +15,9 @@ unsigned int j = 0; // u know the drill
 #define SURFACE_GPURENDER
 //#define SURFACE_CPURENDER
 
-#include "ezySurface/ezySurfaceServer.h"
-
 #include "drm.h"
+
+#include "usurf/usurfServer.h"
 #include "surface.h"
 
 #if defined(SURFACE_GPURENDER)
@@ -190,40 +190,40 @@ uint32_t getChangedRange(uint32_t value, uint32_t old, uint32_t new)
 			/((float)old);
 }
 #if defined(SURFACE_CPURENDER)
-void TouchscreenPositionX(unsigned int value,struct ProgramStruct* data)
+void TouchscreenPositionX(uint32_t userid, unsigned int value,struct ProgramStruct* data)
 {
 	uint32_t width = ((struct CPUFrameBuffer*)data->fb)->fb_front->width;
 	uint32_t newx = getChangedRange(value, 32000, width);
 	surfaceSetCursorX(data->surface, newx);
 }
 
-void TouchscreenPositionY(unsigned int value, struct ProgramStruct* data)
+void TouchscreenPositionY(uint32_t userid, unsigned int value, struct ProgramStruct* data)
 {
 	uint32_t height = ((struct CPUFrameBuffer*)data->fb)->fb_front->height;
 	uint32_t newy = getChangedRange(value, 32000, height);
 	surfaceSetCursorY(data->surface, newy);
 }
 #elif defined(SURFACE_GPURENDER)
-void TouchscreenPositionX(unsigned int value,struct ProgramStruct* data)
+void TouchscreenPositionX(uint32_t userid, unsigned int value,struct ProgramStruct* data)
 {
 	uint32_t width = data->gbm->hdisplay;
 	uint32_t newx = getChangedRange(value, 32000, width);
 	surfaceSetCursorX(data->surface, newx);
 }
 
-void TouchscreenPositionY(unsigned int value, struct ProgramStruct* data)
+void TouchscreenPositionY(uint32_t userid, unsigned int value, struct ProgramStruct* data)
 {
 	uint32_t height = data->gbm->vdisplay;
 	uint32_t newy = getChangedRange(value, 32000, height);
 	surfaceSetCursorY(data->surface, newy);
 }
-void TouchpadPositionX(unsigned int value, struct ProgramStruct* data)
+void TouchpadPositionX(uint32_t userid, unsigned int value, struct ProgramStruct* data)
 {
 	uint32_t width = data->gbm->hdisplay;
 	uint32_t newx = getChangedRange(value-80,2900,width);
 	surfaceSetCursorX(data->surface, newx);
 }
-void TouchpadPositionY(unsigned int value, struct ProgramStruct* data)
+void TouchpadPositionY(uint32_t userid, unsigned int value, struct ProgramStruct* data)
 {
 	uint32_t height = data->gbm->vdisplay;
 	uint32_t newy = getChangedRange(value-80,1400,height);
@@ -231,31 +231,31 @@ void TouchpadPositionY(unsigned int value, struct ProgramStruct* data)
 }
 #endif
 void 
-TouchscreenClick(struct ProgramStruct* data, unsigned short code,
+TouchscreenClick(uint32_t userid, struct ProgramStruct* data, unsigned short code,
 		unsigned int value)
 {
 	clickSurface(data->surface,code,value);
 }
 
 void
-MouseMoveX(int value, struct ProgramStruct* data)
+MouseMoveX(uint32_t userid, int value, struct ProgramStruct* data)
 {
 	surfaceMoveCursorX(data->surface, value);
 }
 
 void
-MouseMoveY(int value, struct ProgramStruct* data)
+MouseMoveY(uint32_t userid, int value, struct ProgramStruct* data)
 {
 	surfaceMoveCursorY(data->surface, value);
 }
 
 void
-MouseKey(struct ProgramStruct* data, unsigned short code, unsigned int value)
+MouseKey(uint32_t userid, struct ProgramStruct* data, unsigned short code, unsigned int value)
 {
 	clickSurface(data->surface,code,value);
 }
 
-void SuperSpace(struct ProgramStruct* data)
+void SuperSpace(uint32_t userid, struct ProgramStruct* data)
 {
 	// Program Box
 }
@@ -264,14 +264,16 @@ void
 eventReadLoop(struct ControlUnit* cu)
 {
 	int ret;
-	while(!(ret = cuEventRead(cu))) {
+	printf("eventReadLoop\n");
+	while((ret = cuEventRead(cu)) == 0) {
 		struct ProgramStruct* programStruct = cu->data;
 	
-		surfaceLookUpClients(programStruct->surface,
+		surfaceLookupClients(programStruct->surface,
 				programStruct->unixserver);
 
-		surfaceLookUpRequests(programStruct->surface);
+		surfaceLookupRequests(programStruct->surface);
 	}
+	printf("eventReadLoop end\n");
 }
 
 int
@@ -383,7 +385,8 @@ main(int argc, char* argv[])
 	controlUnit.MouseKey = MouseKey;
 
 	printf("UNIX Server.\n");
-	programStruct->unixserver = ezySurfaceCreateUnixServer("/surfacedesktop/regulardesktop-0");
+	programStruct->unixserver = 
+		usurfServerCreateUnixServer("/surfacedesktop/regulardesktop-0");
 	perror("E");
 
 	pthread_t controlUnitThread;
@@ -391,17 +394,6 @@ main(int argc, char* argv[])
        	// BOOOM, READING OPTIMIZATION!!!!
 	while(1) {
 		drmVSyncFlip(drm_fd,page_flip_handler); // GPU
-		
-		// Control
-		//int cresult = cuEventRead(&controlUnit);
-		
-		/*
-		#if defined(SURFACE_GPURENDER)	
-		drmVSyncFlip(drm_fd,gpu_page_flip_handler); // GPU
-		#elif defined(SURFACE_CPURENDER)
-		drmVSyncFlip(drm_fd,cpu_page_flip_handler); // CPU
-		#endif
-		*/
 	}
 	
 closeprogram:

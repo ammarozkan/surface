@@ -324,6 +324,35 @@ drawWindowBuffer(float sx, float sy, float ex, float ey)
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
+void 
+drawWindowButton(struct Window* win, 
+		struct WindowElement* button)
+{
+	glUseProgram(surfacePrograms->windowProgram);
+	glUniform2f(surfacePrograms->d_w_s, 
+			win->sx+button->x, win->sy+button->y);
+	glUniform2f(surfacePrograms->d_w_e, 
+			win->sx+button->x+button->w, win->sy+button->y+button->h);
+
+	glBindBuffer(GL_ARRAY_BUFFER, surfaceBuffers->rectangle);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+void
+drawWindowElements(struct StrictWindow* win)
+{
+	for(uint32_t i = 0 ; i < win->buttonCount ; i+=1) {
+		drawWindowButton(win, win->buttons[i]);
+	}
+}
+
+void
+drawWindow(struct Window* win)
+{
+	drawWindowBuffer(win->sx, win->sy, 
+			win->ex, win->ey);
+}
+
 
 // Actual Rendering
 
@@ -336,8 +365,7 @@ void render_surface(struct Surface* surf)
 	
 	SURF_ITERATE(struct Window, surf->wins, win)
 	{
-		drawWindowBuffer(win->sx, win->sy,
-				win->ex, win->ey);
+		drawWindow(win);
 	}
 //	drawWindowBuffer(100.0f, 100.0f, 300.0f, 200.0f);
 	drawMenuBar(surf->menubar);

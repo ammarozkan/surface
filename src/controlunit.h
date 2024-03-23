@@ -44,22 +44,26 @@ struct MouseInterface; // this interface will be used
 		       // when multimouse support is came
 		       // out. (multicursor)
 
-struct ControlUnit {
+struct ControlUserFiles {
 	int fdKeyboard, fdTouchscreen, fdTouchpad, fdMouse;
-
 	uint8_t specialKeys;
-	void* data;
-	void (*SuperSpace)(void* data);
-	void (*TouchscreenPositionX)(unsigned int value, void* data);
-	void (*TouchscreenPositionY)(unsigned int value, void* data);
-	void (*TouchscreenClick)(void* data, unsigned short code, 
-			unsigned int value);
-	void (*TouchpadPositionX)(unsigned int value, void* data);
-	void (*TouchpadPositionY)(unsigned int value, void* data);
+};
+struct ControlUnit {
+	uint32_t usercount;
+	struct ControlUserFiles* users;
 
-	void (*MouseMoveX)(int value, void* data);
-	void (*MouseMoveY)(int value, void* data);
-	void (*MouseKey)(void* data, unsigned short code, unsigned int value);
+	void* data;
+	void (*SuperSpace)(uint32_t userid, void* data);
+	void (*TouchscreenPositionX)(uint32_t userid, unsigned int value, void* data);
+	void (*TouchscreenPositionY)(uint32_t userid, unsigned int value, void* data);
+	void (*TouchscreenClick)(uint32_t userid, void* data, unsigned short code, 
+			unsigned int value);
+	void (*TouchpadPositionX)(uint32_t userid, unsigned int value, void* data);
+	void (*TouchpadPositionY)(uint32_t userid, unsigned int value, void* data);
+
+	void (*MouseMoveX)(uint32_t userid, int value, void* data);
+	void (*MouseMoveY)(uint32_t userid, int value, void* data);
+	void (*MouseKey)(uint32_t userid, void* data, unsigned short code, unsigned int value);
 };
 
 int
@@ -73,50 +77,62 @@ cuOpenNonBlock(char* filename)
 	return result;
 }
 
+struct ControlUserFiles
+getControlUser(char* keyboardpath, char* touchscreenpath,
+		char* touchpadpath, char* mousepath)
+{
+	struct ControlUserFiles cuf;
+	cuf.fdKeyboard; cuf.fdTouchscreen; cuf.fdTouchpad; cuf.fdMouse;
+	cuf.fdKeyboard = cuOpenNonBlock(keyboardpath);
+	cuf.fdTouchscreen = cuOpenNonBlock(touchscreenpath);
+	cuf.fdTouchpad = cuOpenNonBlock(touchpadpath);
+	cuf.fdMouse = cuOpenNonBlock(mousepath);
+	return cuf;
+}
+
 struct ControlUnit
 cuCreateControlUnit(char* keyboardpath,char* touchscreenpath,
 		char* touchpadpath, char* mousepath)
 {
 	struct ControlUnit cu;
-	cu.fdKeyboard = cuOpenNonBlock(keyboardpath);
-	cu.fdTouchscreen = cuOpenNonBlock(touchscreenpath);
-	cu.fdTouchpad = cuOpenNonBlock(touchpadpath);
-	cu.fdMouse = cuOpenNonBlock(mousepath);
+	cu.users = malloc(sizeof(struct ControlUserFiles));
+	cu.usercount = 1;
+	cu.users[0] = getControlUser(keyboardpath, touchscreenpath, touchpadpath, mousepath);
 	return cu;
 }
 
 void
-handleSpecialKey(uint8_t cu_key, unsigned int value,
+handleSpecialKey(uint32_t userid, uint8_t cu_key, unsigned int value,
 		struct ControlUnit* cu)
 {
 	if(value == 1) 
-		cu->specialKeys = cu->specialKeys | cu_key;
+		cu->users[userid].specialKeys = cu->users[userid].specialKeys | cu_key;
 	else if(value == 0) 
-		cu->specialKeys = cu->specialKeys & ~cu_key;
+		cu->users[userid].specialKeys = cu->users[userid].specialKeys & ~cu_key;
 }
 
 void
-handleKey(unsigned short code, unsigned int value,
+handleKey(uint32_t userid, unsigned short code, unsigned int value,
 		struct ControlUnit* cu)
 {
-	if(cu->specialKeys & CU_SUPERKEY && value == 1)
+	if(cu->users[userid].specialKeys & CU_SUPERKEY && value == 1)
 	{
 		switch(code)
 		{
 		case KEY_SPACE:
-			cu->SuperSpace(cu->data);
+			cu->SuperSpace(userid, cu->data);
 			break;
 		}
 	}
 }
 
 int
-cuKeyboardEventread(int fd,struct ControlUnit* cu)
+cuKeyboardEventread(int userid, struct ControlUnit* cu)
 {
 	struct input_event ev;
 	unsigned int size;
 	errno = 0;
-	size = read(fd, &ev, sizeof(struct input_event));
+	size = read(cu->users[userid].fdKeyboard, &ev, sizeof(struct input_event));
 	if (errno == EAGAIN) {
 		return 0;
 	} else if (size < sizeof(struct input_event)) {
@@ -127,23 +143,23 @@ cuKeyboardEventread(int fd,struct ControlUnit* cu)
 	{
 		switch(ev.code) {
 		case KEY_SUPER:
-			handleSpecialKey(CU_SUPERKEY, ev.value, cu);
+			handleSpecialKey(userid, CU_SUPERKEY, ev.value, cu);
 			break;
 		default: 
-			handleKey(ev.code, ev.value, cu);
+			handleKey(userid, ev.code, ev.value, cu);
 			break;
 		}
 	}
 	return 1;
 }
 
-int cuTouchscreenEventread(int fd, struct ControlUnit* cu)
+int cuTouchscreenEventread(int userid, struct ControlUnit* cu)
 {
 	struct input_event ev;
 	errno = 0;
 	unsigned int size = 0;
 	
-	size = read(fd, &ev, sizeof(struct input_event));
+	size = read(cu->users[userid].fdTouchscreen, &ev, sizeof(struct input_event));
 	if(errno == EAGAIN) {
 		return 0;
 	} else if(size < sizeof(struct input_event)) {
@@ -152,22 +168,21 @@ int cuTouchscreenEventread(int fd, struct ControlUnit* cu)
 	}
 	if(ev.type == EV_ABS) {
 		if(ev.code == ABS_X) 
-			cu->TouchscreenPositionX(ev.value, cu->data);
+			cu->TouchscreenPositionX(userid, ev.value, cu->data);
 		else if(ev.code == ABS_Y) 
-			cu->TouchscreenPositionY(ev.value, cu->data);
+			cu->TouchscreenPositionY(userid, ev.value, cu->data);
 	} else if(ev.type == EV_KEY) {
-		cu->TouchscreenClick(cu->data,ev.code,ev.value);
+		cu->TouchscreenClick(userid, cu->data,ev.code,ev.value);
 	}
 }
 
 int
-cuTouchpadEventread(int fd, struct ControlUnit* cu)
+cuTouchpadEventread(int userid, struct ControlUnit* cu)
 {
 	struct input_event ev;
 	errno = 0;
 	unsigned int size = 0;
-
-	size = read(fd, &ev, sizeof(struct input_event));
+	size = read(cu->users[userid].fdTouchpad, &ev, sizeof(struct input_event));
 	if(errno == EAGAIN) {
 		return 0;
 	} else if(size < sizeof(struct input_event)) {
@@ -176,20 +191,20 @@ cuTouchpadEventread(int fd, struct ControlUnit* cu)
 	}
 	if(ev.type == EV_ABS) {
 		if(ev.code == ABS_MT_POSITION_X)
-			cu->TouchpadPositionX(ev.value, cu->data);
+			cu->TouchpadPositionX(userid, ev.value, cu->data);
 		else if(ev.code == ABS_MT_POSITION_Y)
-			cu->TouchpadPositionY(ev.value, cu->data);
+			cu->TouchpadPositionY(userid, ev.value, cu->data);
 	}
 }
 
 int
-cuMouseEventread(int fd, struct ControlUnit* cu)
+cuMouseEventread(int userid, struct ControlUnit* cu)
 {
 	struct input_event ev;
 	errno = 0;
 	unsigned int size = 0;
 
-	size = read(fd, &ev, sizeof(struct input_event));
+	size = read(cu->users[userid].fdMouse, &ev, sizeof(struct input_event));
 	if(errno == EAGAIN) {
 		return 0;
 	} else if(size < sizeof(struct input_event)) {
@@ -198,41 +213,52 @@ cuMouseEventread(int fd, struct ControlUnit* cu)
 	}
 	if(ev.type == EV_REL) {
 		if(ev.code == REL_X)
-			cu->MouseMoveX(ev.value, cu->data);
+			cu->MouseMoveX(userid, ev.value, cu->data);
 		else if(ev.code == REL_Y)
-			cu->MouseMoveY(ev.value, cu->data);
+			cu->MouseMoveY(userid, ev.value, cu->data);
 	} else if(ev.type == EV_KEY) {
-		cu->MouseKey(cu->data, ev.code, ev.value);
+		cu->MouseKey(userid, cu->data, ev.code, ev.value);
 	}
+	return 0;
+}
+
+int
+cuUserRead(struct ControlUnit* cu, int userid)
+{
+	int ret = 0;
+	struct ControlUserFiles cuf = cu->users[userid];
+
+
+keyboardeventreadloopdo:
+	if(cuf.fdKeyboard == -1);
+	else if( (ret = cuKeyboardEventread(userid, cu)) == 1) goto keyboardeventreadloopdo;
+	else if(ret == -1) return -1;
+
+touchscreeneventreadloopdo:
+	if(cuf.fdTouchscreen == -1);
+	else if( (ret = cuTouchscreenEventread(userid,cu)) == 1 ) goto touchscreeneventreadloopdo;
+	else if(ret == -1) return -1;
+
+mouseeventreadloopdo:
+	if(cuf.fdMouse == -1);
+	else if( (ret = cuMouseEventread(userid,cu)) == 1 ) goto mouseeventreadloopdo;
+	else if(ret == -1) return -1;
+
+#ifndef CU_IGNORE_TOUCHPAD
+touchpadeventreadloopdo:
+	if (cuf.fdTouchpad == -1);
+	else if( (ret = cuTouchpadEventread(userid,cu)) == 1 ) goto touchpadeventreadloopdo;
+	else if(ret == -1) return -1;
+#endif
+
+	return 0;
 }
 
 int 
 cuEventRead(struct ControlUnit* cu)
 {
-	int ret = 0;
-keyboardeventreadloopdo:
-	//cuKeyboardEventread(cu->fdKeyboard,cu);
-	if (cu->fdKeyboard);
-	else if( (ret = cuKeyboardEventread(cu->fdKeyboard,cu)) == 1 ) goto keyboardeventreadloopdo;
-	else if(ret == -1) return -1;
-
-touchscreeneventreadloopdo:
-	//cuTouchscreenEventread(cu->fdMouse,cu);
-	if(cu->fdTouchscreen == -1);
-	else if( (ret = cuTouchscreenEventread(cu->fdTouchscreen,cu)) == 1 ) goto touchscreeneventreadloopdo;
-	else if(ret == -1) return -1;
-
-mouseeventreadloopdo:
-	if(cu->fdMouse == -1);
-	else if( (ret == cuMouseEventread(cu->fdMouse,cu)) == 1 ) goto mouseeventreadloopdo;
-	else if(ret == -1) return -1;
-
-#ifndef CU_IGNORE_TOUCHPAD
-touchpadeventreadloopdo:
-	if (cu->fdTouchpad == -1);
-	else if( (ret = cuTouchpadEventread(cu->fdTouchpad,cu)) == 1 ) goto touchpadeventreadloopdo;
-	else if(ret == -1) return -1;
-#endif
-
+	for (unsigned int i = 0 ; i < cu->usercount ; i += 1) {
+		if (cuUserRead(cu, i) == -1) return -1;
+	}
 	return 0;
 }
