@@ -142,7 +142,8 @@ DrmSystemEnableFlip(int drm_fd, struct DrmSystem* drmSystem,
 }
 int
 drmVSyncFlip(int drm_fd, 
-		void (*page_flip_handler)(int, unsigned, unsigned, unsigned, void*))
+		void (*page_flip_handler)(int, unsigned, unsigned, 
+			unsigned, void*))
 {
 	/*	
 	struct pollfd pollfd = {
@@ -170,5 +171,4 @@ drmVSyncFlip(int drm_fd,
 		.page_flip_handler = page_flip_handler,
 	};
 	drmHandleEvent(drm_fd, &context);
-	
 }

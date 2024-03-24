@@ -17,7 +17,7 @@ usurfClientConnect(const char* place)
 socketexit:
 	close(socketfd);
 directexit:
-	return NULL;
+	return -1;
 }
 
 int

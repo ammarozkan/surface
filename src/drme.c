@@ -270,8 +270,8 @@ eventReadLoop(struct ControlUnit* cu)
 	
 		surfaceLookupClients(programStruct->surface,
 				programStruct->unixserver);
-
-		surfaceLookupRequests(programStruct->surface);
+		
+		//surfaceLookupRequests(programStruct->surface);
 	}
 	printf("eventReadLoop end\n");
 }

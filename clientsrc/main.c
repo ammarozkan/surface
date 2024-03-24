@@ -15,6 +15,6 @@ main()
 	printf("Client Connect %i!\n", socketfd);
 
 	if(usurfClientSendEntry(socketfd, 300, 200)) printf("Client:Succes!\n");
-	else printf("Client:Fail\n");
+	else printf("Client:Fail!\n");
 	return 0;
 }
